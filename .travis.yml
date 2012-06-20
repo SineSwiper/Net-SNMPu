@@ -1,0 +1,13 @@
+language: perl
+perl:
+   - "5.14"
+   - "5.12"
+   - "5.10"
+
+before-install:
+   - cpanm --quiet --notest Module::Install
+
+# whitelist
+branches:
+   only:
+     - master
