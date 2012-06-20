@@ -79,23 +79,37 @@ in the VarBindList.  The value of each hash entry is set equal to the value of
 the corresponding ObjectSyntax. The undefined value is returned if there has 
 been a failure and the C<error()> method may be used to determine the reason.
 
+=head2 Multiple Non-blocking Objects for Multiple Hosts
+
+Multiple non-blocking sessions can be created to query multiple hosts at the
+same time.  Each object is different and can have different options, but they
+are all tied to the same dispatcher.  This means that the dispatcher will
+process all requests from all hosts when the event loop is started, and won't
+return until everything has replied or timed out.
+
+Prior to v6.10, Net::SNMPu would send requests as fast as possible, even if the
+transport buffers could not handle the amount of data returning back.  This was
+especially true when communicating with multiple hosts on the traditional UDP
+port.  Data was checked and processed as requests were being sent, but only one
+packet at a time.
+
+With the improved dispatcher code, new requests are send to the various hosts
+until data is detected on the transport buffers.  Then the data is processed
+until the buffers are empty again.  This pattern is repeated until the queue
+is empty.  This balance between sending and receiving keeps requests flowing
+quickly, but mitigates against overloading.  This allows for dispatch queues
+with as many requests and/or hosts as possible, as long as the Net::SNMPu
+client has the CPU/RAM resources to process them.
+
 =cut
 
 # ============================================================================
 
-use strict;
-
-## Validate the version of Perl
-
-BEGIN
-{
-   die 'Perl version 5.6.0 or greater is required' if ($] < 5.006);
-}
+use sanity;
 
 ## Version of the Net::SNMPu module
 
-our $VERSION = 'v6.0.1';
-    $VERSION = eval $VERSION;
+our $VERSION = v6.0.1;
 
 ## Load our modules
 
@@ -125,8 +139,8 @@ our %EXPORT_TAGS = (
           GET_BULK_REQUEST INFORM_REQUEST SNMPV2_TRAP REPORT )
    ],
    debug       => [
-      qw( DEBUG_ALL DEBUG_NONE DEBUG_MESSAGE DEBUG_TRANSPORT DEBUG_DISPATCHER
-          DEBUG_PROCESSING DEBUG_SECURITY snmp_debug )
+      qw( DEBUG_ALL DEBUG_NONE DEBUG_SNMP DEBUG_MESSAGE DEBUG_TRANSPORT
+          DEBUG_DISPATCHER DEBUG_PROCESSING DEBUG_SECURITY snmp_debug )
    ],
    generictrap => [
       qw( COLD_START WARM_START LINK_DOWN LINK_UP AUTHENTICATION_FAILURE
@@ -153,6 +167,7 @@ $EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 
 sub DEBUG_ALL         { 0xff }  # All
 sub DEBUG_NONE        { 0x00 }  # None
+sub DEBUG_SNMP        { 0x01 }  # Main Net::SNMPu functions
 sub DEBUG_MESSAGE     { 0x02 }  # Message/PDU encoding/decoding
 sub DEBUG_TRANSPORT   { 0x04 }  # Transport Layer
 sub DEBUG_DISPATCHER  { 0x08 }  # Dispatcher
@@ -161,7 +176,8 @@ sub DEBUG_SECURITY    { 0x20 }  # Security
 
 ## Package variables
 
-our $DEBUG = DEBUG_NONE;        # Debug mask 
+our $DEBUG_MASK = DEBUG_NONE;   # Debug mask
+our $DEBUG      = 0;            # Debug mode for just Net::SNMPu
 
 our $DISPATCHER;                # Dispatcher instance
 
@@ -286,7 +302,7 @@ represents the "default" context.
 {
    my @trans_argv = qw(
       hostname (?:de?st|peer)?(?:addr|port) (?:src|sock|local)(?:addr|port)
-      maxmsgsize mtu retries timeout domain listen
+      maxrequests? maxmsgsize mtu retries timeout domain listen
    );
 
    sub new
@@ -405,6 +421,7 @@ sub open
                            [-maxmsgsize    => $octets,]
                            [-translate     => $translate,]
                            [-debug         => $bitmask,]
+                           [-maxrequests   => $count,]       # non-blocking
                            [-community     => $community,]   # v1/v2c
                            [-username      => $username,]    # v3
                            [-authkey       => $authkey,]     # v3
@@ -424,10 +441,10 @@ to determine the cause of the error.
 
 Most of the named arguments passed to the constructor define basic attributes
 for the object and are not modifiable after the object has been created.  The
-B<-timeout>, B<-retries>, B<-maxmsgsize>, B<-translate>, and B<-debug>
-arguments are modifiable using an accessor method.  See their corresponding 
-method definitions for a complete description of their usage, default values, 
-and valid ranges.
+B<-timeout>, B<-retries>, B<-maxmsgsize>, B<-maxrequests>, B<-translate>, and
+B<-debug> arguments are modifiable using an accessor method.  See their
+corresponding method definitions for a complete description of their usage,
+default values, and valid ranges.
 
 =over
 
@@ -1779,6 +1796,54 @@ sub mtu
    goto &max_msg_size;
 }
 
+=head2 max_requests() - set or get the current number of maximum requests for the object
+
+   $count = $session->max_requests([$count]);
+
+This method returns the current value for the maximum number of new requests
+for the Net::SNMPu object.  This only applies for non-blocking sessions, and is
+individual for each session object (host).  The default is 3 new requests (per
+host) at a time.
+
+This argument is used to throttle the number of new requests sent to the host at
+a time before it waits for other ones to finish.  For example, if it's set to the
+default of three, and six "get_table" requests for that host are in the queue,
+the dispatcher will only send the first three, wait for one of the requests to
+finish, and send another one.  This will repeat until the queue is complete.
+
+This is very useful for large requests with single or multiple hosts.  Prior to
+v6.10, Net::SNMPu would send every request as fast as it could, which would
+likely overload the host.  This would result in timeouts for all of the
+requests.  With the throttle, requests can be controlled to what the host is
+able to handle.  The default of 3 is good for most hosts, but can be set
+lower or higher, depending on the speed and reliability of the host.
+
+If a parameter is specified, the max requests is set to the provided
+value if it falls within the range 0 to 65535.  The undefined value is returned
+upon an error and the C<error()> method may be used to determine the cause.
+
+Setting it to 0 will remove any throttling, and a setting of 1 will only allow
+a single request at a time for that session.  Any timeouts on the host will
+automatically set this option to 1, to make retries more effective.  (If desired,
+this behavior can be overridden by re-changing it on the callback sub.)
+
+=cut
+
+sub max_requests
+{
+   my $this = shift;
+
+   if (!defined $this->{_transport}) {
+      return $this->_error('The session is closed');
+   }
+
+   if (defined (my $max_requests = $this->{_transport}->max_requests(@_))) {
+      return $max_requests;
+   }
+
+   return $this->_error($this->{_transport}->error());
+}
+
 =head2 translate() - enable or disable the translation mode for the object
 
    $mask = $session->translate([ 
@@ -1935,6 +2000,10 @@ passed to the C<debug()> method.  The bit mask is broken up as follows:
 
 =item * 
 
+0x01 - Main Net::SNMPu functions
+
+=item *
+
 0x02 - Message or PDU encoding and decoding 
 
 =item * 
@@ -1973,17 +2042,18 @@ sub debug
 
    if (@_ == 2) {
 
-      $DEBUG = ($mask =~ /^\d+$/) ? $mask : ($mask) ? DEBUG_ALL : DEBUG_NONE;
+      $DEBUG_MASK = ($mask =~ /^\d+$/) ? $mask : ($mask) ? DEBUG_ALL : DEBUG_NONE;
 
-      eval { Net::SNMPu::Message->debug($DEBUG & DEBUG_MESSAGE);              };
-      eval { Net::SNMPu::Transport->debug($DEBUG & DEBUG_TRANSPORT);          };
-      eval { Net::SNMPu::Dispatcher->debug($DEBUG & DEBUG_DISPATCHER);        };
-      eval { Net::SNMPu::MessageProcessing->debug($DEBUG & DEBUG_PROCESSING); };
-      eval { Net::SNMPu::Security->debug($DEBUG & DEBUG_SECURITY);            };
+      $DEBUG = $DEBUG_MASK & DEBUG_SNMP;
+      eval { Net::SNMPu::Message->debug($DEBUG_MASK & DEBUG_MESSAGE);              };
+      eval { Net::SNMPu::Transport->debug($DEBUG_MASK & DEBUG_TRANSPORT);          };
+      eval { Net::SNMPu::Dispatcher->debug($DEBUG_MASK & DEBUG_DISPATCHER);        };
+      eval { Net::SNMPu::MessageProcessing->debug($DEBUG_MASK & DEBUG_PROCESSING); };
+      eval { Net::SNMPu::Security->debug($DEBUG_MASK & DEBUG_SECURITY);            };
 
    }
 
-   return $DEBUG;
+   return $DEBUG_MASK;
 }
 
 sub snmp_debug
@@ -2519,8 +2589,9 @@ sub _perform_discovery
       return $this->_discovery_failed();
    }
 
-   # Send the PDU
-   $DISPATCHER->send_pdu($this->{_pdu}, 0);
+   # Send the PDU (as a priority, so that we don't build up a
+   # large discovery queue)
+   $DISPATCHER->send_pdu_priority($this->{_pdu});
 
    if (!$this->{_nonblocking}) {
       snmp_dispatcher();
@@ -2585,8 +2656,8 @@ sub _discovery_engine_id_cb
       return $this->_discovery_failed();
    }
 
-   # Send the PDU
-   $DISPATCHER->send_pdu($this->{_pdu}, 0);
+   # Send the (priority) PDU
+   $DISPATCHER->send_pdu_priority($this->{_pdu});
 
    if (!$this->{_nonblocking}) {
       snmp_dispatcher();
@@ -2824,12 +2895,9 @@ sub _get_entries_cb
             # The response column does not map to the the request, there
             # could be a "hole" or we are out of entries.
 
-            DEBUG_INFO('last_entry: column mismatch: %s', $name);
             $last_entry = TRUE;
             next;
          }
-
-         DEBUG_INFO('found index [%s]', $index);
 
          # Validate the index of the response.
 
@@ -2885,7 +2953,6 @@ sub _get_entries_cb
             @row = ();
             $row_index = $index;
             $row[$col_num] = $name;
-            DEBUG_INFO('new minimum row_index [%s]', $row_index);
 
          } else {
 
@@ -2938,7 +3005,6 @@ sub _get_entries_cb
       # Store the maximum index found to be used for the next request.
       if (oid_lex_cmp($row_index, $max_index) > 0) {
          $max_index = $row_index;
-         DEBUG_INFO('new max_index [%s]', $max_index);
       }
 
    }
@@ -3036,8 +3102,9 @@ sub _get_table_entries_request_next
       }
    }
 
-   # Send the next PDU with no delay.
-   $DISPATCHER->send_pdu($this->{_pdu}, 0);
+   # Send the next PDU as a priority
+   # (Existing requests get priority over new ones)
+   $DISPATCHER->send_pdu_priority($this->{_pdu});
 
    return;
 }

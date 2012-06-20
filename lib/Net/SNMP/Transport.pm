@@ -1,25 +1,8 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Transport;
 
-# $Id: Transport.pm,v 3.0 2009/09/09 15:05:33 dtown Rel $
+# ABSTRACT: Base object for the Net::SNMPu Transport Domain objects.
 
-# Base object for the Net::SNMPu Transport Domain objects.
-
-# Copyright (c) 2004-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
-## Version of the Net::SNMPu::Transport module
-
-our $VERSION = v3.0.0;
+use sanity;
 
 ## Handle importing/exporting of symbols
 
@@ -43,58 +26,62 @@ Exporter::export_ok_tags( qw( domains msgsize ports retries timeout ) );
 $EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 
 ## Transport Layer Domain definitions
+use constant {
 
 # RFC 3417 Transport Mappings for SNMP
 # Presuhn, Case, McCloghrie, Rose, and Waldbusser; December 2002
 
-sub DOMAIN_UDP             { '1.3.6.1.6.1.1' }  # snmpUDPDomain
+   DOMAIN_UDP => '1.3.6.1.6.1.1',  # snmpUDPDomain
 
 # RFC 3419 Textual Conventions for Transport Addresses
 # Consultant, Schoenwaelder, and Braunschweig; December 2002
 
-sub DOMAIN_UDPIPV4   { '1.3.6.1.2.1.100.1.1' }  # transportDomainUdpIpv4
-sub DOMAIN_UDPIPV6   { '1.3.6.1.2.1.100.1.2' }  # transportDomainUdpIpv6
-sub DOMAIN_UDPIPV6Z  { '1.3.6.1.2.1.100.1.4' }  # transportDomainUdpIpv6z
-sub DOMAIN_TCPIPV4   { '1.3.6.1.2.1.100.1.5' }  # transportDomainTcpIpv4
-sub DOMAIN_TCPIPV6   { '1.3.6.1.2.1.100.1.6' }  # transportDomainTcpIpv6
-sub DOMAIN_TCPIPV6Z  { '1.3.6.1.2.1.100.1.8' }  # transportDomainTcpIpv6z
-
+   DOMAIN_UDPIPV4  => '1.3.6.1.2.1.100.1.1',  # transportDomainUdpIpv4
+   DOMAIN_UDPIPV6  => '1.3.6.1.2.1.100.1.2',  # transportDomainUdpIpv6
+   DOMAIN_UDPIPV6Z => '1.3.6.1.2.1.100.1.4',  # transportDomainUdpIpv6z
+   DOMAIN_TCPIPV4  => '1.3.6.1.2.1.100.1.5',  # transportDomainTcpIpv4
+   DOMAIN_TCPIPV6  => '1.3.6.1.2.1.100.1.6',  # transportDomainTcpIpv6
+   DOMAIN_TCPIPV6Z => '1.3.6.1.2.1.100.1.8',  # transportDomainTcpIpv6z
+   
 ## SNMP well-known ports
-
-sub SNMP_PORT             { 161 }
-sub SNMP_TRAP_PORT        { 162 }
-
+   
+   SNMP_PORT            => 161,
+   SNMP_TRAP_PORT       => 162,
+   
 ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
-
-sub MSG_SIZE_DEFAULT     {  484 }
-sub MSG_SIZE_MINIMUM     {  484 }
-sub MSG_SIZE_MAXIMUM    { 65535 }   # 2147483647 is not reasonable
-
-sub RETRIES_DEFAULT        {  1 }
-sub RETRIES_MINIMUM        {  0 }
-sub RETRIES_MAXIMUM        { 20 }
-
-sub TIMEOUT_DEFAULT      {  5.0 }
-sub TIMEOUT_MINIMUM      {  1.0 }
-sub TIMEOUT_MAXIMUM      { 60.0 }
-
+   
+   MSG_SIZE_DEFAULT     =>   484,
+   MSG_SIZE_MINIMUM     =>   484,
+   MSG_SIZE_MAXIMUM     => 65535,  # 2147483647 is not reasonable
+   
+   RETRIES_DEFAULT      =>   1,
+   RETRIES_MINIMUM      =>   0,
+   RETRIES_MAXIMUM      =>  20,
+   
+   TIMEOUT_DEFAULT      =>   5.0,
+   TIMEOUT_MINIMUM      =>   1.0,
+   TIMEOUT_MAXIMUM      =>  60.0,
+   
+   MAX_REQUESTS_DEFAULT =>     3,
+   MAX_REQUESTS_MINIMUM =>     0,
+   MAX_REQUESTS_MAXIMUM => 65535,
+   
 ## Truth values
-
-sub TRUE                 { 0x01 }
-sub FALSE                { 0x00 }
-
+   
+   TRUE                 =>   1,
+   FALSE                =>   0,
+   
 ## Shared socket array indexes
-
-sub _SHARED_SOCKET          { 0 }   # Shared Socket object
-sub _SHARED_REFC            { 1 }   # Reference count
-sub _SHARED_MAXSIZE         { 2 }   # Shared maxMsgSize
+   
+   _SHARED_SOCKET       =>   0,   # Shared Socket object
+   _SHARED_REFC         =>   1,   # Reference count
+   _SHARED_MAXSIZE      =>   2,   # Shared maxMsgSize
+};
 
 ## Package variables
 
 our $DEBUG = FALSE;                 # Debug flag
-
 our $AUTOLOAD;                      # Used by the AUTOLOAD method
-
 our $SOCKETS = {};                  # List of shared sockets
 
 # [public methods] -----------------------------------------------------------
@@ -104,11 +91,14 @@ our $SOCKETS = {};                  # List of shared sockets
       'udp/?(?:ip)?v?4?',          DOMAIN_UDPIPV4,
       quotemeta DOMAIN_UDP,        DOMAIN_UDPIPV4,
       quotemeta DOMAIN_UDPIPV4,    DOMAIN_UDPIPV4,
+
       'udp/?(?:ip)?v?6',           DOMAIN_UDPIPV6,
       quotemeta DOMAIN_UDPIPV6,    DOMAIN_UDPIPV6,
       quotemeta DOMAIN_UDPIPV6Z,   DOMAIN_UDPIPV6,
+
       'tcp/?(?:ip)?v?4?',          DOMAIN_TCPIPV4,
       quotemeta DOMAIN_TCPIPV4,    DOMAIN_TCPIPV4,
+
       'tcp/?(?:ip)?v?6',           DOMAIN_TCPIPV6,
       quotemeta DOMAIN_TCPIPV6,    DOMAIN_TCPIPV6,
       quotemeta DOMAIN_TCPIPV6Z,   DOMAIN_TCPIPV6,
@@ -154,45 +144,44 @@ our $SOCKETS = {};                  # List of shared sockets
       # module when requested.   Some modules require non-core modules and
       # if these modules are not present, we gracefully return an error. 
 
-      if ($domain eq DOMAIN_UDPIPV6) {
-
-         if (defined ($error = load_module('Net::SNMPu::Transport::IPv6::UDP')))
-         {
-            $error = 'UDP/IPv6 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
+      my ($s, $error);
+      for ($domain) {
+         when (DOMAIN_UDPIPV6) {
+            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::UDP');
+            if ($error) {
+               $error = 'UDP/IPv6 support is unavailable ' . $error;
+               return wantarray ? (undef, $error) : undef;
+            }
+            return Net::SNMPu::Transport::IPv6::UDP->new(%argv);
          }
-         return Net::SNMPu::Transport::IPv6::UDP->new(%argv);
-
-      } elsif ($domain eq DOMAIN_TCPIPV6) {
-
-         if (defined ($error = load_module('Net::SNMPu::Transport::IPv6::TCP')))
-         {
-            $error = 'TCP/IPv6 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
+         when (DOMAIN_TCPIPV6) {
+            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::TCP');
+            if ($error) {
+               $error = 'TCP/IPv6 support is unavailable ' . $error;
+               return wantarray ? (undef, $error) : undef;
+            }
+            return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
          }
-         return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
-
-      } elsif ($domain eq DOMAIN_TCPIPV4) {
-
-         if (defined ($error = load_module('Net::SNMPu::Transport::IPv4::TCP')))
-         {
-            $error = 'TCP/IPv4 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
+         when (DOMAIN_TCPIPV4) {
+            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv4::TCP');
+            if ($error) {
+               $error = 'TCP/IPv4 support is unavailable ' . $error;
+               return wantarray ? (undef, $error) : undef;
+            }
+            return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
          }
-         return Net::SNMPu::Transport::IPv4::TCP->new(%argv);
-
+         # Load the default Transport Domain module without eval protection.
+         default {
+            require Net::SNMPu::Transport::IPv4::UDP;
+            return  Net::SNMPu::Transport::IPv4::UDP->new(%argv);
+         }
       }
 
-      # Load the default Transport Domain module without eval protection.
-
-      require Net::SNMPu::Transport::IPv4::UDP;
-      return  Net::SNMPu::Transport::IPv4::UDP->new(%argv);
    }
 
 }
 
-sub max_msg_size
-{
+sub max_msg_size {
    my ($this, $size) = @_;
 
    if (@_ < 2) {
@@ -221,8 +210,33 @@ sub max_msg_size
    return $this->{_max_msg_size} = $size;
 }
 
-sub timeout
-{
+sub max_requests {
+   my ($this, $max_requests) = @_;
+
+   if (@_ < 2) {
+      return $this->{_max_requests};
+   }
+
+   $this->_error_clear();
+
+   if ($max_requests !~ m/^\d+(?:\.\d+)?$/) {
+      return $this->_error(
+         'The max requests value "%s" is expected in positive numeric format',
+         $max_requests
+      );
+   }
+
+   if ($max_requests < MAX_REQUESTS_MINIMUM || $max_requests > MAX_REQUESTS_MAXIMUM) {
+      return $this->_error(
+         'The max requests value %s is out of range (%d..%d)',
+         $max_requests, MAX_REQUESTS_MINIMUM, MAX_REQUESTS_MAXIMUM
+      );
+   }
+
+   return $this->{_max_requests} = $max_requests;
+}
+
+sub timeout {
    my ($this, $timeout) = @_;
 
    if (@_ < 2) {
@@ -248,8 +262,7 @@ sub timeout
    return $this->{_timeout} = $timeout;
 }
 
-sub retries
-{
+sub retries {
    my ($this, $retries) = @_;
 
    if (@_ < 2) {
@@ -275,107 +288,70 @@ sub retries
    return $this->{_retries} = $retries;
 }
 
-sub agent_addr
-{
-   return '0.0.0.0';
-}
+### TODO: This whole thing needs a Moo treatment badly... ###
 
-sub connectionless
-{
-   return TRUE;
-}
-
-sub debug
-{
+sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
-sub domain
-{
-   return '0.0';
-}
+sub agent_addr     { return '0.0.0.0'; }
+sub connectionless { return TRUE; }
+sub domain         { return '0.0'; }
+sub error          { return $_[0]->{_error} || q{}; }
+sub fileno         { return defined($_[0]->{_socket}) ? $_[0]->{_socket}->fileno() : undef; }
+sub socket         { return $_[0]->{_socket}; }
+sub type           { return '<unknown>'; }  # unknown(0)
 
-sub error
-{
-   return $_[0]->{_error} || q{};
-}
-
-sub fileno
-{
-   return defined($_[0]->{_socket}) ? $_[0]->{_socket}->fileno() : undef;
-}
-
-sub socket
-{
-   return $_[0]->{_socket};
-}
-
-sub type
-{
-   return '<unknown>'; # unknown(0)
-}
-
-sub sock_name
-{
+sub sock_name {
    if (defined $_[0]->{_socket}) {
       return $_[0]->{_socket}->sockname() || $_[0]->{_sock_name};
-   } else {
+   }
+   else {
       return $_[0]->{_sock_name};
    }
 }
 
-sub sock_hostname
-{
+sub sock_hostname {
    return $_[0]->{_sock_hostname} || $_[0]->sock_address();
 }
 
-sub sock_address
-{
+sub sock_address {
    return $_[0]->_address($_[0]->sock_name());
 }
 
-sub sock_addr
-{
+sub sock_addr {
    return $_[0]->_addr($_[0]->sock_name());
 }
 
-sub sock_port
-{
+sub sock_port {
    return $_[0]->_port($_[0]->sock_name());
 }
 
-sub sock_taddress
-{
+sub sock_taddress {
    return $_[0]->_taddress($_[0]->sock_name());
 }
 
-sub sock_taddr
-{
+sub sock_taddr {
    return $_[0]->_taddr($_[0]->sock_name());
 }
 
-sub sock_tdomain
-{
+sub sock_tdomain {
    return $_[0]->_tdomain($_[0]->sock_name());
 }
 
-sub dest_name
-{
+sub dest_name {
    return $_[0]->{_dest_name};
 }
 
-sub dest_hostname
-{
+sub dest_hostname {
    return $_[0]->{_dest_hostname} || $_[0]->dest_address();
 }
 
-sub dest_address
-{
+sub dest_address {
    return $_[0]->_address($_[0]->dest_name());
 }
 
-sub dest_addr
-{
+sub dest_addr {
    return $_[0]->_addr($_[0]->dest_name());
 }
 
@@ -443,8 +419,7 @@ sub peer_tdomain
    return $_[0]->_tdomain($_[0]->peer_name());
 }
 
-sub AUTOLOAD
-{
+sub AUTOLOAD {
    my $this = shift;
 
    return if $AUTOLOAD =~ /::DESTROY$/;
@@ -470,8 +445,7 @@ sub AUTOLOAD
    return;
 }
 
-sub DESTROY
-{
+sub DESTROY {
    my ($this) = @_;
 
    # Connection-oriented transports do not share sockets.
@@ -489,50 +463,9 @@ sub DESTROY
    return;
 }
 
-## Obsolete methods - previous deprecated 
-
-sub OBSOLETE
-{
-   my ($this, $method) = splice @_, 0, 2;
-
-   require Carp;
-   Carp::croak(
-      sprintf '%s() is obsolete, use %s() instead', (caller 1)[3], $method
-   );
-
-   # Never get here.
-   return $this->${\$method}(@_);
-}
-
-sub name     { return $_[0]->OBSOLETE('type');          }
-
-sub srcaddr  { return $_[0]->OBSOLETE('sock_addr');     }
-
-sub srcport  { return $_[0]->OBSOLETE('sock_port');     }
-
-sub srchost  { return $_[0]->OBSOLETE('sock_address');  }
-
-sub srcname  { return $_[0]->OBSOLETE('sock_address');  }
-
-sub dstaddr  { return $_[0]->OBSOLETE('dest_addr');     }
-
-sub dstport  { return $_[0]->OBSOLETE('dest_port');     }
-
-sub dsthost  { return $_[0]->OBSOLETE('dest_address');  }
-
-sub dstname  { return $_[0]->OBSOLETE('dest_hostname'); }
-
-sub recvaddr { return $_[0]->OBSOLETE('peer_addr');     }
-
-sub recvport { return $_[0]->OBSOLETE('peer_port');     }
-
-sub recvhost { return $_[0]->OBSOLETE('peer_address');  }
-
-
 # [private methods] ----------------------------------------------------------
 
-sub _new
-{
+sub _new {
    my ($class, %argv) = @_;
 
    my $this = bless {
@@ -540,6 +473,7 @@ sub _new
       '_dest_name'     => undef,                       # Destination sockaddr
       '_error'         => undef,                       # Error message
       '_max_msg_size'  => $class->_msg_size_default(), # maxMsgSize
+      '_max_requests'  => MAX_REQUESTS_DEFAULT,        # Max # of new requests
       '_retries'       => RETRIES_DEFAULT,             # Number of retries      
       '_socket'        => undef,                       # Socket object
       '_sock_hostname' => q{},                         # Socket hostname
@@ -616,6 +550,8 @@ sub _new
          }
       } elsif ((/^-?maxmsgsize$/i) || (/^-?mtu$/i)) {
          $this->max_msg_size($argv{$_});
+      } elsif (/^-?maxrequests?$/i) {
+         $this->max_requests($argv{$_});
       } elsif (/^-?retries$/i) {
          $this->retries($argv{$_});
       } elsif (/^-?timeout$/i) {
@@ -713,8 +649,7 @@ sub _new
    return wantarray ? ($this, q{}) : $this;
 }
 
-sub _service_resolve
-{
+sub _service_resolve {
    my ($this, $serv, $nh) = @_;
 
    $nh->{port} = undef;
@@ -739,13 +674,11 @@ sub _service_resolve
    return $nh->{port};
 }
 
-sub _protocol
-{
+sub _protocol {
    return (getprotobyname $_[0]->_protocol_name())[2];
 }
 
-sub _shared_max_size
-{
+sub _shared_max_size {
    my ($this, $size) = @_;
 
    # Connection-oriented transports do not share sockets.
@@ -772,13 +705,11 @@ sub _shared_max_size
    return $SOCKETS->{$this->{_sock_name}}->[_SHARED_MAXSIZE];
 }
 
-sub _msg_size_default
-{
+sub _msg_size_default {
    return MSG_SIZE_DEFAULT;
 }
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    if (!defined $this->{_error}) {
@@ -792,8 +723,7 @@ sub _error
    return;
 }
 
-sub strerror
-{
+sub strerror {
    if ($! =~ /^Unknown error/) {
       return sprintf '%s', $^E if ($^E);
       require Errno;
@@ -808,8 +738,7 @@ sub strerror
    return $! ? sprintf('%s', $!) : 'No error';
 }
 
-sub _perror
-{
+sub _perror {
    my $this = shift;
 
    if (!defined $this->{_error}) {
@@ -824,49 +753,12 @@ sub _perror
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    $! = 0;
    return $_[0]->{_error} = undef;
 }
 
-{
-   my %modules;
-
-   sub load_module
-   {
-      my ($module) = @_;
-
-      # We attempt to load the required module under the protection of an 
-      # eval statement.  If there is a failure, typically it is due to a 
-      # missing module required by the requested module and we attempt to 
-      # simplify the error message by just listing that module.  We also 
-      # need to track failures since require() only produces an error on 
-      # the first attempt to load the module.
-
-      # NOTE: Contrary to our typical convention, a return value of "undef"
-      # actually means success and a defined value means error.
-
-      return $modules{$module} if exists $modules{$module};
-
-      if (!eval "require $module") {
-         if ($@ =~ /locate (\S+\.pm)/) {
-            $modules{$module} = err_msg('(Required module %s not found)', $1);
-         } elsif ($@ =~ /(.*)\n/) {
-            $modules{$module} = err_msg('(%s)', $1);
-         } else {
-            $modules{$module} = err_msg('(%s)', $@);
-         }
-      } else {
-         $modules{$module} = undef;
-      }
-
-      return $modules{$module};
-   }
-}
-
-sub err_msg
-{
+sub err_msg {
    my $msg = (@_ > 1) ? sprintf(shift(@_), @_) : $_[0];
 
    if ($DEBUG) {
@@ -876,8 +768,7 @@ sub err_msg
    return $msg;
 }
 
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return $DEBUG if (!$DEBUG);
 
    return printf
