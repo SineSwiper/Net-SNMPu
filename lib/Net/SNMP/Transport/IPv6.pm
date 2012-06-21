@@ -1,39 +1,19 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Transport::IPv6;
 
-# $Id: IPv6.pm,v 1.1 2009/09/09 15:08:31 dtown Rel $
+# ABSTRACT: Base object for the IPv6 Transport Domains.
 
-# Base object for the IPv6 Transport Domains.
-
-# Copyright (c) 2008-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Transport qw( DEBUG_INFO );
-
 use Socket6 0.23 qw(
    PF_INET6 AF_INET6 in6addr_any in6addr_loopback getaddrinfo
    pack_sockaddr_in6_all unpack_sockaddr_in6_all inet_pton inet_ntop
 );
 
-## Version of the Net::SNMPu::Transport::IPv6 module
-
-our $VERSION = v1.0.0;
-
 # [public methods] -----------------------------------------------------------
 
-sub agent_addr
-{
-   return '0.0.0.0';
-}
+use constant {
+   agent_addr => '0.0.0.0',
+};
 
 sub sock_flowinfo
 {
@@ -82,20 +62,11 @@ sub peer_tzone
 
 # [private methods] ----------------------------------------------------------
 
-sub _protocol_family
-{
-   return PF_INET6;
-}
-
-sub _addr_any
-{
-   return in6addr_any;
-}
-
-sub _addr_loopback
-{
-   return in6addr_loopback;
-}
+use constant {
+   _protocol_family => PF_INET6,
+   _addr_any        => in6addr_any,
+   _addr_loopback   => in6addr_loopback,
+};
 
 sub _hostname_resolve
 {

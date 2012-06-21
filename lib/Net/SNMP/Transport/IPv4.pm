@@ -1,31 +1,12 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Transport::IPv4;
 
-# $Id: IPv4.pm,v 1.1 2009/09/09 15:08:31 dtown Rel $
+# ABSTRACT: Base object for the IPv4 Transport Domains.
 
-# Base object for the IPv4 Transport Domains.
-
-# Copyright (c) 2008-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Transport;
-
 use IO::Socket qw(
    INADDR_ANY INADDR_LOOPBACK inet_aton PF_INET sockaddr_in inet_ntoa
 );
-
-## Version of the Net::SNMPu::Transport::IPv4 module
-
-our $VERSION = v1.0.0;
 
 # [private methods] ----------------------------------------------------------
 
@@ -38,19 +19,10 @@ sub _socket_create
                                     $this->_protocol());
 }
 
-sub _protocol_family
-{
-   return PF_INET;
-}
-
-sub _addr_any
-{
-   return INADDR_ANY;
-}
-
-sub _addr_loopback
-{
-   return INADDR_LOOPBACK;
+use constant {
+   _protocol_family => PF_INET,
+   _addr_any        => INADDR_ANY,
+   _addr_loopback   => INADDR_LOOPBACK,
 }
 
 sub _hostname_resolve

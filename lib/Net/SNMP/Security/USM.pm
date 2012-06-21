@@ -1,24 +1,9 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Security::USM;
 
-# $Id: USM.pm,v 4.1 2010/09/10 00:01:22 dtown Rel $
+# ABSTRACT: Object that implements the SNMPv3 User-based Security Model.
 
-# Object that implements the SNMPv3 User-based Security Model.
-
-# Copyright (c) 2001-2010 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Security qw( :ALL );
-
 use Net::SNMPu::Message qw(
    :msgFlags asn1_itoa OCTET_STRING SEQUENCE INTEGER SNMP_VERSION_3 TRUE FALSE
 );
@@ -28,16 +13,11 @@ use Digest::MD5();
 use Digest::SHA1();
 use Digest::HMAC();
 
-## Version of the Net::SNMPu::Security::USM module
-
-our $VERSION = v4.0.1;
-
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Security );
+use parent 'Net::SNMPu::Security';
 
 our @EXPORT_OK;
-
 our %EXPORT_TAGS = (
    authprotos => [
       qw( AUTH_PROTOCOL_NONE AUTH_PROTOCOL_HMACMD5 AUTH_PROTOCOL_HMACSHA )
@@ -61,45 +41,45 @@ Exporter::export_ok_tags( qw( authprotos levels models privprotos ) );
 
 $EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 
-## RCC 3414 - Authentication protocols
+use constant {
+   ## RCC 3414 - Authentication protocols
+   AUTH_PROTOCOL_NONE    => '1.3.6.1.6.3.10.1.1.1',  # usmNoAuthProtocol
+   AUTH_PROTOCOL_HMACMD5 => '1.3.6.1.6.3.10.1.1.2',  # usmHMACMD5AuthProtocol
+   AUTH_PROTOCOL_HMACSHA => '1.3.6.1.6.3.10.1.1.3',  # usmHMACSHAAuthProtocol
 
-sub AUTH_PROTOCOL_NONE    { '1.3.6.1.6.3.10.1.1.1' } # usmNoAuthProtocol
-sub AUTH_PROTOCOL_HMACMD5 { '1.3.6.1.6.3.10.1.1.2' } # usmHMACMD5AuthProtocol
-sub AUTH_PROTOCOL_HMACSHA { '1.3.6.1.6.3.10.1.1.3' } # usmHMACSHAAuthProtocol
+   ## RFC 3414 - Privacy protocols
+   PRIV_PROTOCOL_NONE    => '1.3.6.1.6.3.10.1.2.1',  # usmNoPrivProtocol
+   PRIV_PROTOCOL_DES     => '1.3.6.1.6.3.10.1.2.2',  # usmDESPrivProtocol
 
-## RFC 3414 - Privacy protocols
+   ## RFC 3826 - The AES Cipher Algorithm in the SNMP USM 
 
-sub PRIV_PROTOCOL_NONE    { '1.3.6.1.6.3.10.1.2.1' } # usmNoPrivProtocol
-sub PRIV_PROTOCOL_DES     { '1.3.6.1.6.3.10.1.2.2' } # usmDESPrivProtocol
+   # usmAesCfb128Protocol
+   PRIV_PROTOCOL_AESCFB128        =>  '1.3.6.1.6.3.10.1.2.4',
 
-## RFC 3826 - The AES Cipher Algorithm in the SNMP USM 
+   # The privacy protocols below have been implemented using the draft 
+   # specifications intended to extend the User-based Security Model 
+   # defined in RFC 3414.  Since the object definitions have not been 
+   # standardized, they have been based on the Extended Security Options 
+   # Consortium MIB found at http://www.snmp.com/eso/esoConsortiumMIB.txt.
 
-# usmAesCfb128Protocol
-sub PRIV_PROTOCOL_AESCFB128        {  '1.3.6.1.6.3.10.1.2.4' }
+   # Extension to Support Triple-DES EDE <draft-reeder-snmpv3-usm-3desede-00.txt> 
+   # Reeder and Gudmunsson; October 1999, expired April 2000 
 
-# The privacy protocols below have been implemented using the draft 
-# specifications intended to extend the User-based Security Model 
-# defined in RFC 3414.  Since the object definitions have not been 
-# standardized, they have been based on the Extended Security Options 
-# Consortium MIB found at http://www.snmp.com/eso/esoConsortiumMIB.txt.
+   # usm3DESPrivProtocol 
+   PRIV_PROTOCOL_DRAFT_3DESEDE    => '1.3.6.1.4.1.14832.1.1',
 
-# Extension to Support Triple-DES EDE <draft-reeder-snmpv3-usm-3desede-00.txt> 
-# Reeder and Gudmunsson; October 1999, expired April 2000 
+   # AES Cipher Algorithm in the USM <draft-blumenthal-aes-usm-04.txt>
+   # Blumenthal, Maino, and McCloghrie; October 2002, expired April 2003 
 
-# usm3DESPrivProtocol 
-sub PRIV_PROTOCOL_DRAFT_3DESEDE    { '1.3.6.1.4.1.14832.1.1' }
+   # usmAESCfb128PrivProtocol 
+   PRIV_PROTOCOL_DRAFT_AESCFB128  => '1.3.6.1.4.1.14832.1.2',
 
-# AES Cipher Algorithm in the USM <draft-blumenthal-aes-usm-04.txt>
-# Blumenthal, Maino, and McCloghrie; October 2002, expired April 2003 
+   # usmAESCfb192PrivProtocol 
+   PRIV_PROTOCOL_DRAFT_AESCFB192  => '1.3.6.1.4.1.14832.1.3',
 
-# usmAESCfb128PrivProtocol 
-sub PRIV_PROTOCOL_DRAFT_AESCFB128  { '1.3.6.1.4.1.14832.1.2' }
-
-# usmAESCfb192PrivProtocol 
-sub PRIV_PROTOCOL_DRAFT_AESCFB192  { '1.3.6.1.4.1.14832.1.3' }
-
-# usmAESCfb256PrivProtocol
-sub PRIV_PROTOCOL_DRAFT_AESCFB256  { '1.3.6.1.4.1.14832.1.4' }
+   # usmAESCfb256PrivProtocol
+   PRIV_PROTOCOL_DRAFT_AESCFB256  => '1.3.6.1.4.1.14832.1.4',
+};
 
 ## Package variables
 

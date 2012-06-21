@@ -27,7 +27,7 @@ our $VERSION = v2.0.0;
 
 ## Handle importing/exporting of symbols
 
-use base qw( Exporter );
+use parent qw( Exporter );
 
 our @EXPORT_OK = qw( DEBUG_INFO );
 

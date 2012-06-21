@@ -1,33 +1,14 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Transport::IPv4::UDP;
 
-# $Id: UDP.pm,v 4.0 2009/09/09 15:05:33 dtown Rel $
+# ABSTRACT: Object that handles the UDP/IPv4 Transport Domain for the SNMP Engine.
 
-# Object that handles the UDP/IPv4 Transport Domain for the SNMP Engine.
-
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 );
-
 use IO::Socket qw( SOCK_DGRAM );
-
-## Version of the Net::SNMPu::Transport::IPv4::UDP module
-
-our $VERSION = v4.0.0;
 
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport );
+use parent 'Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport';
 
 sub import
 {
@@ -35,8 +16,9 @@ sub import
 }
 
 ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
-
-sub MSG_SIZE_DEFAULT_UDP4  { 1472 }  # Ethernet(1500) - IPv4(20) - UDP(8)
+use constant {
+   MSG_SIZE_DEFAULT_UDP4 => 1472,  # Ethernet(1500) - IPv4(20) - UDP(8)
+};
 
 # [public methods] -----------------------------------------------------------
 
@@ -74,15 +56,10 @@ sub recv
    return defined($name) ? $name : $this->_perror('Receive failure');
 }
 
-sub domain
-{
-   return DOMAIN_UDPIPV4; # transportDomainUdpIpv4
-}
-
-sub type
-{
-   return 'UDP/IPv4'; # udpIpv4(1)
-}
+use constant {
+   domain => DOMAIN_UDPIPV4,  # transportDomainUdpIpv4
+   type   => 'UDP/IPv4',      # udpIpv4(1)
+};
 
 sub agent_addr
 {
@@ -104,25 +81,12 @@ sub agent_addr
 
 # [private methods] ----------------------------------------------------------
 
-sub _protocol_name
-{
-   return 'udp';
-}
-
-sub _protocol_type
-{
-   return SOCK_DGRAM;
-}
-
-sub _msg_size_default
-{
-   return MSG_SIZE_DEFAULT_UDP4;
-}
-
-sub _tdomain
-{
-   return DOMAIN_UDPIPV4;
-}
+use constant {
+   _protocol_name    => 'udp',
+   _protocol_type    => SOCK_DGRAM,
+   _msg_size_default => MSG_SIZE_DEFAULT_UDP4,
+   _tdomain          => DOMAIN_UDPIPV4,
+};
 
 # ============================================================================
 1; # [end Net::SNMPu::Transport::IPv4::UDP]

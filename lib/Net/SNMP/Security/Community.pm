@@ -1,51 +1,30 @@
-# -*- mode: perl -*- 
-# ============================================================================
-
 package Net::SNMPu::Security::Community;
 
-# $Id: Community.pm,v 2.0 2009/09/09 15:05:33 dtown Rel $
+# ABSTRACT: Object that implements the SNMPv1/v2c Community-based Security Model.
 
-# Object that implements the SNMPv1/v2c Community-based Security Model.
-
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Security qw( 
    SECURITY_MODEL_SNMPV1 SECURITY_MODEL_SNMPV2C DEBUG_INFO
 );
-
 use Net::SNMPu::Message qw(
    OCTET_STRING SEQUENCE INTEGER SNMP_VERSION_1 SNMP_VERSION_2C TRUE
 );
 
-## Version of the Net::SNMPu::Security::Community module
-
-our $VERSION = v2.0.0;
-
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Security );
-
-sub import
-{
+use parent 'Net::SNMPu::Security';
+sub import {
    return Net::SNMPu::Security->export_to_level(1, @_);
 }
 
 ## RFC 3584 - snmpCommunityName::=OCTET STRING 
-
-sub COMMUNITY_DEFAULT  { 'public' }
+use constant {
+   COMMUNITY_DEFAULT => 'public',
+};
 
 # [public methods] -----------------------------------------------------------
 
-sub new
-{
+sub new {
    my ($class, %argv) = @_;
 
    # Create a new data structure for the object
@@ -77,8 +56,7 @@ sub new
    return wantarray ? ($this, q{}) : $this;
 }
 
-sub generate_request_msg
-{
+sub generate_request_msg {
    my ($this, $pdu, $msg) = @_;
 
    # Clear any previous errors
@@ -119,8 +97,7 @@ sub generate_request_msg
    return $msg;
 }
 
-sub process_incoming_msg
-{
+sub process_incoming_msg {
    my ($this, $msg) = @_;
 
    # Clear any previous errors
@@ -138,13 +115,11 @@ sub process_incoming_msg
    return TRUE;
 }
 
-sub community
-{
+sub community {
    return $_[0]->{_community};
 }
 
-sub security_model
-{
+sub security_model {
    my ($this) = @_;
 
    # RFC 3411 - SnmpSecurityModel::=TEXTUAL-CONVENTION 
@@ -156,15 +131,13 @@ sub security_model
    return SECURITY_MODEL_SNMPV1;
 }
 
-sub security_name
-{
+sub security_name {
    return $_[0]->{_community};
 }
 
 # [private methods] ----------------------------------------------------------
 
-sub _community
-{
+sub _community {
    my ($this, $community) = @_;
 
    return $this->_error('The community is not defined') if !defined $community;
@@ -174,8 +147,7 @@ sub _community
    return TRUE;
 }
 
-sub _version
-{
+sub _version {
    my ($this, $version) = @_;
 
    if (($version != SNMP_VERSION_1) && ($version != SNMP_VERSION_2C)) {

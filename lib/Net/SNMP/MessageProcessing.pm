@@ -1,45 +1,26 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::MessageProcessing;
 
-# $Id: MessageProcessing.pm,v 3.1 2010/09/10 00:01:22 dtown Rel $
+# ABSTRACT: Object that implements the Message Processing module.
 
-# Object that implements the Message Processing module.
-
-# Copyright (c) 2001-2010 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::PDU qw( 
    :types :msgFlags :securityLevels asn1_itoa SNMP_VERSION_3 TRUE FALSE 
 );
 
 srand( time() ^ ($$ + ($$ <<15)) );
 
-## Version of the Net::SNMPu::MessageProcessing module
-
-our $VERSION = v3.0.1;
-
 ## Package variables
 
 our $INSTANCE;          # Reference to the Singleton object
-
 our $DEBUG = FALSE;     # Debug flag
 
 ## Object array indexes
+use constant {
+   _ERROR   => 0,  # Error message
+   _HANDLES => 1,  # Cached request messages
+};
 
-sub _ERROR    { 0 }     # Error message
-sub _HANDLES  { 1 }     # Cached request messages
-
-BEGIN
-{
+BEGIN {
    # See if there is a better pseudorandom number generator (PRNG) available.
    if (eval 'require Math::Random::MT::Auto') {
       Math::Random::MT::Auto->import('rand');

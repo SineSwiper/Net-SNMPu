@@ -1,51 +1,30 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Transport::IPv4::TCP;
 
-# $Id: TCP.pm,v 3.0 2009/09/09 15:05:33 dtown Rel $
+# ABSTRACT: Object that handles the TCP/IPv4 Transport Domain for the SNMP Engine.
 
-# Object that handles the TCP/IPv4 Transport Domain for the SNMP Engine.
-
-# Copyright (c) 2004-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-
+use sanity;
 use Net::SNMPu::Transport qw( 
    MSG_SIZE_MAXIMUM DOMAIN_TCPIPV4 TRUE FALSE DEBUG_INFO
 );
-
 use Net::SNMPu::Message qw( SEQUENCE );
-
 use IO::Socket qw( SOCK_STREAM );
-
-## Version of the Net::SNMPu::Transport::IPv4::TCP module
-
-our $VERSION = v3.0.0;
 
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport );
+use parent qw( Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport );
 
-sub import
-{
+sub import {
    return Net::SNMPu::Transport->export_to_level(1, @_);
 }
 
 ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
-
-sub MSG_SIZE_DEFAULT_TCP4  { 1460 }  # Ethernet(1500) - IPv4(20) - TCP(20)
+use constant {
+   MSG_SIZE_DEFAULT_TCP4 => 1460,  # Ethernet(1500) - IPv4(20) - TCP(20)
+};
 
 # [public methods] -----------------------------------------------------------
 
-sub new
-{
+sub new {
    my ($this, $error) = shift->SUPER::_new(@_);
 
    if (defined $this) {
@@ -57,8 +36,7 @@ sub new
    return wantarray ? ($this, $error) : $this;
 }
 
-sub accept
-{
+sub accept {
    my ($this) = @_;
 
    $this->_error_clear();
@@ -89,8 +67,7 @@ sub accept
    return $new;
 }
 
-sub send
-{
+sub send {
    my $this = shift;
 
    $this->_error_clear();
@@ -113,8 +90,7 @@ sub send
    return defined($bytes) ? $bytes : $this->_perror('Send failure');
 }
 
-sub recv
-{
+sub recv {
    my $this = shift;
 
    $this->_error_clear();
@@ -235,45 +211,26 @@ sub recv
    return $name || $this->{_socket}->connected();
 }
 
-sub connectionless
-{
-   return FALSE;
-}
+use constant {
+   connectionless => FALSE,
+   domain         => DOMAIN_TCPIPV4,  # transportDomainTcpIpv4
+   type           => 'TCP/IPv4',      # tcpIpv4(5)
+};
 
-sub domain
-{
-   return DOMAIN_TCPIPV4; # transportDomainTcpIpv4
-}
-
-sub type
-{
-   return 'TCP/IPv4'; # tcpIpv4(5)
-}
-
-sub agent_addr
-{
+sub agent_addr {
    return shift->sock_address();
 }
 
 # [private methods] ----------------------------------------------------------
 
-sub _protocol_name
-{
-   return 'tcp';
-}
+use constant {
+   _protocol_name    => 'tcp',
+   _protocol_type    => SOCK_STREAM,
+   _msg_size_default => MSG_SIZE_DEFAULT_TCP4,
+   _tdomain          => DOMAIN_TCPIPV4,  # transportDomainTcpIpv4
+};
 
-sub _protocol_type
-{
-   return SOCK_STREAM;
-}
-
-sub _msg_size_default
-{
-   return MSG_SIZE_DEFAULT_TCP4;
-}
-
-sub _reasm_init
-{
+sub _reasm_init {
    my ($this) = @_;
 
    my $error;
@@ -291,8 +248,7 @@ sub _reasm_init
    return TRUE;
 }
 
-sub _reasm_reset
-{
+sub _reasm_reset {
    my ($this) = @_;
 
    if (defined $this->{_reasm_object}) {
@@ -304,11 +260,6 @@ sub _reasm_reset
    $this->{_reasm_length} = 0;
 
    return TRUE;
-}
-
-sub _tdomain
-{
-   return DOMAIN_TCPIPV4; # transportDomainTcpIpv4
 }
 
 # ============================================================================

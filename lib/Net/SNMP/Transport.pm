@@ -6,7 +6,7 @@ use sanity;
 
 ## Handle importing/exporting of symbols
 
-use base qw( Exporter );
+use parent qw( Exporter );
 
 our @EXPORT_OK = qw( TRUE FALSE DEBUG_INFO );
 

@@ -16,63 +16,59 @@ sub index {
    return $this->{_index};
 }
 
-{
-   my $process_methods = {
-      INTEGER,            \&_process_integer32,
-      OCTET_STRING,       \&_process_octet_string,
-      NULL,               \&_process_null,
-      OBJECT_IDENTIFIER,  \&_process_object_identifier,
-      SEQUENCE,           \&_process_sequence,
-      IPADDRESS,          \&_process_ipaddress,
-      COUNTER,            \&_process_counter,
-      GAUGE,              \&_process_gauge,
-      TIMETICKS,          \&_process_timeticks,
-      OPAQUE,             \&_process_opaque,
-      COUNTER64,          \&_process_counter64,
-      NOSUCHOBJECT,       \&_process_nosuchobject,
-      NOSUCHINSTANCE,     \&_process_nosuchinstance,
-      ENDOFMIBVIEW,       \&_process_endofmibview,
-      GET_REQUEST,        \&_process_get_request,
-      GET_NEXT_REQUEST,   \&_process_get_next_request,
-      GET_RESPONSE,       \&_process_get_response,
-      SET_REQUEST,        \&_process_set_request,
-      TRAP,               \&_process_trap,
-      GET_BULK_REQUEST,   \&_process_get_bulk_request,
-      INFORM_REQUEST,     \&_process_inform_request,
-      SNMPV2_TRAP,        \&_process_v2_trap,
-      REPORT,             \&_process_report
+sub process {
+#  my ($this, $expected, $found) = @_;
+
+   state $process_methods = {
+      INTEGER           => \&_process_integer,
+      OCTET_STRING      => \&_process_octet_string,
+      NULL              => \&_process_null,
+      OBJECT_IDENTIFIER => \&_process_object_identifier,
+      SEQUENCE          => \&_process_sequence,
+      IPADDRESS         => \&_process_ipaddress,
+      COUNTER           => \&_process_counter,
+      GAUGE             => \&_process_gauge,
+      TIMETICKS         => \&_process_timeticks,
+      OPAQUE            => \&_process_opaque,
+      COUNTER64         => \&_process_counter64,
+      NOSUCHOBJECT      => \&_process_nosuchobject,
+      NOSUCHINSTANCE    => \&_process_nosuchinstance,
+      ENDOFMIBVIEW      => \&_process_endofmibview,
+      GET_REQUEST       => \&_process_get_request,
+      GET_NEXT_REQUEST  => \&_process_get_next_request,
+      GET_RESPONSE      => \&_process_get_response,
+      SET_REQUEST       => \&_process_set_request,
+      TRAP              => \&_process_trap,
+      GET_BULK_REQUEST  => \&_process_get_bulk_request,
+      INFORM_REQUEST    => \&_process_inform_request,
+      SNMPV2_TRAP       => \&_process_v2_trap,
+      REPORT            => \&_process_report,
    };
 
-   sub process
-   {
-#     my ($this, $expected, $found) = @_;
+   # XXX: If present, $found is updated as a side effect.
 
-      # XXX: If present, $found is updated as a side effect.
+   return $_[0]->_error() if defined $_[0]->{_error};
+   return $_[0]->_error() if !defined (my $type = $_[0]->_buffer_get(1));
 
-      return $_[0]->_error() if defined $_[0]->{_error};
+   $type = unpack 'C', $type;
 
-      return $_[0]->_error() if !defined (my $type = $_[0]->_buffer_get(1));
-
-      $type = unpack 'C', $type;
-
-      if (!exists $process_methods->{$type}) {
-         return $_[0]->_error('The ASN.1 type 0x%02x is unknown', $type);
-      }
-
-      # Check to see if a specific ASN.1 type was expected.
-      if ((@_ > 1) && (defined $_[1]) && ($type != $_[1])) {
-         return $_[0]->_error(
-            'Expected %s, but found %s', asn1_itoa($_[1]), asn1_itoa($type)
-         );
-      }
-
-      # Update the found ASN.1 type, if the argument is present. 
-      if (@_ == 3) {
-         $_[2] = $type;
-      }
-
-      return $_[0]->${\$process_methods->{$type}}($type);
+   if (!exists $process_methods->{$type}) {
+      return $_[0]->_error('The ASN.1 type 0x%02x is unknown', $type);
    }
+
+   # Check to see if a specific ASN.1 type was expected.
+   if ((@_ > 1) && (defined $_[1]) && ($type != $_[1])) {
+      return $_[0]->_error(
+         'Expected %s, but found %s', asn1_itoa($_[1]), asn1_itoa($type)
+      );
+   }
+
+   # Update the found ASN.1 type, if the argument is present. 
+   if (@_ == 3) {
+      $_[2] = $type;
+   }
+
+   return $_[0]->${\$process_methods->{$type}}($type);
 }
 
 #
@@ -112,15 +108,14 @@ sub oid_lex_sort {
       return @_;
    }
 
-   return map { $_->[0] }
-             sort { $a->[1] cmp $b->[1] }
-                map
-                {
-                   my $oid = $_;
-                   $oid =~ s/^\.//;
-                   $oid =~ s/ /\.0/g;
-                   [$_, pack 'N*', split m/\./, $oid]
-                } @_;
+   return map  { $_->[0] }
+          sort { $a->[1] cmp $b->[1] }
+          map  {
+             my $oid = $_;
+             $oid =~ s/^\.//;
+             $oid =~ s/ /\.0/g;
+             [$_, pack('N*', split m/\./, $oid)]
+          } @_;
 }
 
 # [private methods] ----------------------------------------------------------
@@ -129,8 +124,7 @@ sub oid_lex_sort {
 # Basic Encoding Rules (BER) process methods
 #
 
-sub _process_length
-{
+sub _process_length {
    my ($this) = @_;
 
    return $this->_error() if defined $this->{_error};
@@ -167,8 +161,7 @@ sub _process_length
 ### XXX: This is slightly different than the XS version, which doesn't include
 ### translation.
 
-sub _process_integer32
-{
+sub _process_integer32 {
    my ($this, $type) = @_;
 
    # Decode the length
@@ -214,8 +207,7 @@ sub _process_integer32
    return unpack 'L', pack 'L', $int32;
 }
 
-sub _process_octet_string
-{
+sub _process_octet_string {
    my ($this, $type) = @_;
 
    # Decode the length
@@ -266,8 +258,7 @@ sub _process_octet_string
    return $s;
 }
 
-sub _process_object_identifier
-{
+sub _process_object_identifier {
    my ($this) = @_;
 
    # Decode the length
@@ -328,14 +319,12 @@ sub _process_object_identifier
    return join q{.}, @oid;
 }
 
-sub _process_sequence
-{
+sub _process_sequence {
    # Return the length, instead of the value
    goto &_process_length;
 }
 
-sub _process_ipaddress
-{
+sub _process_ipaddress {
    my ($this) = @_;
 
    # Decode the length
@@ -352,21 +341,18 @@ sub _process_ipaddress
    return $this->_error();
 }
 
-sub _process_counter
-{
+sub _process_counter {
    goto &_process_integer32;
 }
 
-sub _process_gauge
-{
+sub _process_gauge {
    goto &_process_integer32;
 }
 
 ### XXX: This is slightly different than the XS version, which doesn't include
 ### translation.
 
-sub _process_timeticks
-{
+sub _process_timeticks {
    my ($this) = @_;
 
    if (defined(my $ticks = $this->_process_integer32(TIMETICKS))) {
@@ -381,13 +367,11 @@ sub _process_timeticks
    return $this->_error();
 }
 
-sub _process_opaque
-{
+sub _process_opaque {
    goto &_process_octet_string;
 }
 
-sub _process_counter64
-{
+sub _process_counter64 {
    my ($this, $type) = @_;
 
    # Verify the SNMP version
@@ -466,36 +450,37 @@ sub _buffer_append {
 }
 
 sub _buffer_get {
-   my ($this, $requested) = @_;
+   #my ($this, $requested) = @_;
 
-   return $this->_error() if defined $this->{_error};
+   return $_[0]->_error() if defined $_[0]->{_error};
 
    # Return the number of bytes requested at the current index or 
    # clear and return the whole buffer if no argument is passed. 
 
    if (@_ == 2) {
 
-      if (($this->{_index} += $requested) > $this->{_length}) {
-         $this->{_index} -= $requested;
-         if ($this->{_length} >= $this->max_msg_size()) {
-            return $this->_error(
+      if (($_[0]->{_index} += $_[1]) > $_[0]->{_length}) {
+         $_[0]->{_index} -= $_[1];
+         if ($_[0]->{_length} >= $_[0]->max_msg_size()) {
+            return $_[0]->_error(
                'The message size exceeded the buffer maxMsgSize of %d',
-               $this->max_msg_size()
+               $_[0]->max_msg_size()
             );
          }
-         return $this->_error('Unexpected end of message buffer');
+         return $_[0]->_error('Unexpected end of message buffer');
       }
 
-      return substr $this->{_buffer}, $this->{_index} - $requested, $requested;
+      return substr $_[0]->{_buffer}, $_[0]->{_index} - $_[1], $_[1];
    }
 
    # Always reset the index when the buffer is modified
-   $this->{_index} = 0;
+   $_[0]->{_index} = 0;
 
    # Update our length to 0, the whole buffer is about to be cleared.
-   $this->{_length} = 0;
+   $_[0]->{_length} = 0;
 
-   return substr $this->{_buffer}, 0, CORE::length($this->{_buffer}), q{};
+   ### HACK: Redefining length in the first place was kinda hacky... ###
+   return substr $_[0]->{_buffer}, 0, CORE::length($_[0]->{_buffer}), q{};
 }
 
 # ============================================================================

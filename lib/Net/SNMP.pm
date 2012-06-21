@@ -121,7 +121,7 @@ use Net::SNMPu::Message();
 
 ## Handle importing/exporting of symbols
 
-use base qw( Exporter );
+use parent qw( Exporter );
 
 our @EXPORT = qw(
    INTEGER INTEGER32 OCTET_STRING OBJECT_IDENTIFIER IPADDRESS COUNTER
@@ -2228,102 +2228,94 @@ sub _create_pdu
    return $this->{_pdu};
 }
 
-{
-   my $versions = {
-      '(?:snmp)?v?1',     SNMP_VERSION_1,
-      '(?:snmp)?v?2c?',   SNMP_VERSION_2C,
-      '(?:snmp)?v?3',     SNMP_VERSION_3,
+sub _version {
+   my ($this, $version) = @_;
+
+   state $versions = {
+      '(?:snmp)?v?1'   => SNMP_VERSION_1,
+      '(?:snmp)?v?2c?' => SNMP_VERSION_2C,
+      '(?:snmp)?v?3'   => SNMP_VERSION_3,
    };
+   
+   # XXX: The passed $version is updated as a side effect.
 
-   sub _version
-   {
-      my ($this, $version) = @_;
+   # Clear any previous error message.
+   $this->_error_clear();
 
-      # XXX: The passed $version is updated as a side effect.
-
-      # Clear any previous error message.
-      $this->_error_clear();
-
-      if ($version eq q{}) {
-         return $this->_error('An empty SNMP version was specified');
-      }
-
-      for (keys %{$versions}) {
-         if ($version =~ m/^$_$/i) {
-            $_[1] = $this->{_version} = $versions->{$_};
-            return TRUE;
-         }
-      }
-
-      return $this->_error('The SNMP version "%s" is unknown', $version);
+   if ($version eq q{}) {
+      return $this->_error('An empty SNMP version was specified');
    }
 
+   for (keys %{$versions}) {
+      if ($version =~ m/^$_$/i) {
+         $_[1] = $this->{_version} = $versions->{$_};
+         return TRUE;
+      }
+   }
+
+   return $this->_error('The SNMP version "%s" is unknown', $version);
 }
 
-{
+
+sub _prepare_argv {
+   my ($this, $allowed, $named, $unnamed) = @_;
+
    # Arguments that apply to the object.
-   my $obj_args = {
+   state $obj_args = {
       -callback        => \&_callback,          # non-blocking only
       -contextengineid => \&_context_engine_id, # v3 only
       -contextname     => \&_context_name,      # v3 only
       -delay           => \&_delay,             # non-blocking only
    };
 
-   sub _prepare_argv
-   {
-      my ($this, $allowed, $named, $unnamed) = @_;
+   # XXX: Argument $unnamed is updated by reference. 
 
-      # XXX: Argument $unnamed is updated by reference. 
+   my %argv;
 
-      my %argv;
+   # For backwards compatibility, check to see if the first 
+   # argument is an OBJECT IDENTIFIER in dotted notation.  If it
+   # is, assign it to the -varbindlist argument.
 
-      # For backwards compatibility, check to see if the first 
-      # argument is an OBJECT IDENTIFIER in dotted notation.  If it
-      # is, assign it to the -varbindlist argument.
-
-      if ((@{$named}) && ($named->[0] =~ m/^\.?\d+(?:\.\d+)* *$/)) {
-         $argv{-varbindlist} = $named;
-      } else {
-         %argv = @{$named};
-      }
-
-      # Go through the passed argument list and see if the argument is
-      # allowed.  If it is, see if it applies to the object and has a 
-      # matching method call or add it the the new argv list to be 
-      # returned by this method.
-
-      my %new_args;
-
-      for my $key (keys %argv) {
-         my @match = grep { /^-?\Q$key\E$/i } @{$allowed};
-         if (@match == 1) {
-            if (exists $obj_args->{$match[0]}) {
-               if (!defined $this->${\$obj_args->{$match[0]}}($argv{$key})) {
-                  return $this->_error();
-               }
-            } else {
-               $new_args{$match[0]} = $argv{$key};
-            }
-         } else {
-            return $this->_error('The argument "%s" is unknown', $key);
-         }
-      }
-
-      # Create a new ordered unnamed argument list based on the allowed 
-      # list passed, ignoring those that applied to the object.
-
-      for (@{$allowed}) {
-         next if exists $obj_args->{$_};
-         push @{$unnamed}, exists($new_args{$_}) ? $new_args{$_} : undef;
-      }
-
-      return TRUE;
+   if ((@{$named}) && ($named->[0] =~ m/^\.?\d+(?:\.\d+)* *$/)) {
+      $argv{-varbindlist} = $named;
+   } else {
+      %argv = @{$named};
    }
 
+   # Go through the passed argument list and see if the argument is
+   # allowed.  If it is, see if it applies to the object and has a 
+   # matching method call or add it the the new argv list to be 
+   # returned by this method.
+
+   my %new_args;
+
+   for my $key (keys %argv) {
+      my @match = grep { /^-?\Q$key\E$/i } @{$allowed};
+      if (@match == 1) {
+         if (exists $obj_args->{$match[0]}) {
+            if (!defined $this->${\$obj_args->{$match[0]}}($argv{$key})) {
+               return $this->_error();
+            }
+         } else {
+            $new_args{$match[0]} = $argv{$key};
+         }
+      } else {
+         return $this->_error('The argument "%s" is unknown', $key);
+      }
+   }
+
+   # Create a new ordered unnamed argument list based on the allowed 
+   # list passed, ignoring those that applied to the object.
+
+   for (@{$allowed}) {
+      next if exists $obj_args->{$_};
+      push @{$unnamed}, exists($new_args{$_}) ? $new_args{$_} : undef;
+   }
+
+   return TRUE;
 }
 
-sub _callback
-{
+sub _callback {
    my ($this, $callback) = @_;
 
    # We validate the callback argument and then create an anonymous 
@@ -2353,8 +2345,7 @@ sub _callback
    return TRUE;
 }
 
-sub _callback_closure
-{
+sub _callback_closure {
    my ($this) = @_;
 
    # When a response message is received, the Dispatcher will create
@@ -2390,8 +2381,7 @@ sub _callback_closure
       };
 }
 
-sub _context_engine_id
-{
+sub _context_engine_id {
    my ($this, $context_engine_id) = @_;
 
    $this->_error_clear();
@@ -2423,8 +2413,7 @@ sub _context_engine_id
    return TRUE;
 }
 
-sub _context_name
-{
+sub _context_name {
    my ($this, $context_name) = @_;
 
    $this->_error_clear();
@@ -2449,8 +2438,7 @@ sub _context_name
    return TRUE;
 }
 
-sub _delay
-{
+sub _delay {
    my ($this, $delay) = @_;
 
    $this->_error_clear();
@@ -2478,8 +2466,7 @@ sub _delay
    return TRUE;
 }
 
-sub _object_type_validate
-{
+sub _object_type_validate {
    my ($this) = @_;
 
    # Since both non-blocking and blocking objects use the same
@@ -2504,8 +2491,7 @@ sub _object_type_validate
    return $count;
 }
 
-sub _perform_discovery
-{
+sub _perform_discovery {
    my ($this) = @_;
 
    return TRUE if ($this->{_security}->discovered());

@@ -249,48 +249,46 @@ sub new {
    return wantarray ? ($this, q{}) : $this;
 }
 
-{
-   my $prepare_methods = {
-      INTEGER,            \&_prepare_integer,
-      OCTET_STRING,       \&_prepare_octet_string,
-      NULL,               \&_prepare_null,
-      OBJECT_IDENTIFIER,  \&_prepare_object_identifier,
-      SEQUENCE,           \&_prepare_sequence,
-      IPADDRESS,          \&_prepare_ipaddress,
-      COUNTER,            \&_prepare_counter,
-      GAUGE,              \&_prepare_gauge,
-      TIMETICKS,          \&_prepare_timeticks,
-      OPAQUE,             \&_prepare_opaque,
-      COUNTER64,          \&_prepare_counter64,
-      NOSUCHOBJECT,       \&_prepare_nosuchobject,
-      NOSUCHINSTANCE,     \&_prepare_nosuchinstance,
-      ENDOFMIBVIEW,       \&_prepare_endofmibview,
-      GET_REQUEST,        \&_prepare_get_request,
-      GET_NEXT_REQUEST,   \&_prepare_get_next_request,
-      GET_RESPONSE,       \&_prepare_get_response,
-      SET_REQUEST,        \&_prepare_set_request,
-      TRAP,               \&_prepare_trap,
-      GET_BULK_REQUEST,   \&_prepare_get_bulk_request,
-      INFORM_REQUEST,     \&_prepare_inform_request,
-      SNMPV2_TRAP,        \&_prepare_v2_trap,
-      REPORT,             \&_prepare_report
-   };
-
-   sub prepare {
+sub prepare {
 #     my ($this, $type, $value) = @_;
 
-      return $_[0]->_error() if defined $_[0]->{_error};
+   state $prepare_methods = {
+      INTEGER           => \&_prepare_integer,
+      OCTET_STRING      => \&_prepare_octet_string,
+      NULL              => \&_prepare_null,
+      OBJECT_IDENTIFIER => \&_prepare_object_identifier,
+      SEQUENCE          => \&_prepare_sequence,
+      IPADDRESS         => \&_prepare_ipaddress,
+      COUNTER           => \&_prepare_counter,
+      GAUGE             => \&_prepare_gauge,
+      TIMETICKS         => \&_prepare_timeticks,
+      OPAQUE            => \&_prepare_opaque,
+      COUNTER64         => \&_prepare_counter64,
+      NOSUCHOBJECT      => \&_prepare_nosuchobject,
+      NOSUCHINSTANCE    => \&_prepare_nosuchinstance,
+      ENDOFMIBVIEW      => \&_prepare_endofmibview,
+      GET_REQUEST       => \&_prepare_get_request,
+      GET_NEXT_REQUEST  => \&_prepare_get_next_request,
+      GET_RESPONSE      => \&_prepare_get_response,
+      SET_REQUEST       => \&_prepare_set_request,
+      TRAP              => \&_prepare_trap,
+      GET_BULK_REQUEST  => \&_prepare_get_bulk_request,
+      INFORM_REQUEST    => \&_prepare_inform_request,
+      SNMPV2_TRAP       => \&_prepare_v2_trap,
+      REPORT            => \&_prepare_report,
+   };
 
-      if (!defined $_[1]) {
-         return $_[0]->_error('The ASN.1 type is not defined');
-      }
+   return $_[0]->_error() if defined $_[0]->{_error};
 
-      if (!exists $prepare_methods->{$_[1]}) {
-         return $_[0]->_error('The ASN.1 type "%s" is unknown', $_[1]);
-      }
-
-      return $_[0]->${\$prepare_methods->{$_[1]}}($_[2]);
+   if (!defined $_[1]) {
+      return $_[0]->_error('The ASN.1 type is not defined');
    }
+
+   if (!exists $prepare_methods->{$_[1]}) {
+      return $_[0]->_error('The ASN.1 type "%s" is unknown', $_[1]);
+   }
+
+   return $_[0]->${\$prepare_methods->{$_[1]}}($_[2]);
 }
 
 sub context_engine_id {
@@ -513,25 +511,13 @@ sub version {
    return $this->{_version};
 }
 
-sub error_status {
-   return 0; # noError(0) 
-}
-
-sub error_index {
-   return 0;
-}
-
-sub var_bind_list {
-   return undef;
-}
-
-sub var_bind_names {
-   return [];
-}
-
-sub var_bind_types {
-   return undef;
-}
+use constant {
+   error_status   => 0,  # noError(0)
+   error_index    => 0,
+   var_bind_list  => undef,
+   var_bind_names => [],
+   var_bind_types => undef,
+};
 
 #
 # Security Model accessor methods
@@ -579,16 +565,6 @@ sub hostname {
    }
 
    return q{};
-}
-
-sub dstname {
-   require Carp;
-   Carp::croak(
-      sprintf '%s::dstname() is obsolete, use hostname() instead', ref $_[0]
-   );
-
-   # Never get here.
-   return shift->hostname(@_);
 }
 
 sub max_msg_size {
@@ -661,13 +637,11 @@ sub recv {
 # Data representation methods
 #
 
-sub translate
-{
+sub translate {
    return (@_ == 2) ? $_[0]->{_translate} = $_[1] : $_[0]->{_translate};
 }
 
-sub leading_dot
-{
+sub leading_dot {
    return (@_ == 2) ? $_[0]->{_leading_dot} = $_[1] : $_[0]->{_leading_dot};
 }
 
@@ -675,8 +649,7 @@ sub leading_dot
 # Callback handler methods
 #
 
-sub callback
-{
+sub callback {
    my ($this, $callback) = @_;
 
    if (@_ == 2) {
@@ -692,8 +665,7 @@ sub callback
    return $this->{_callback};
 }
 
-sub callback_execute
-{
+sub callback_execute {
    my ($this) = @_;
 
    if (!defined $this->{_callback}) {
@@ -712,8 +684,7 @@ sub callback_execute
    return ($@) ? $this->_error($@) : TRUE;
 }
 
-sub status_information
-{
+sub status_information {
    my $this = shift;
 
    if (@_) {
@@ -728,13 +699,11 @@ sub status_information
    return $this->{_error} || q{};
 }
 
-sub process_response_pdu
-{
+sub process_response_pdu {
    goto &callback_execute;
 }
 
-sub timeout_id
-{
+sub timeout_id {
    return (@_ == 2) ? $_[0]->{_timeout_id} = $_[1] : $_[0]->{_timeout_id};
 }
 
@@ -744,33 +713,27 @@ sub timeout_id
 
 #sub index
 
-sub length
-{
+sub length {
    return $_[0]->{_length};
 }
 
-sub prepend
-{
+sub prepend {
    goto &_buffer_put;
 }
 
-sub append
-{
+sub append {
    goto &_buffer_append;
 }
 
-sub copy
-{
+sub copy {
    return $_[0]->{_buffer};
 }
 
-sub reference
-{
+sub reference {
    return \$_[0]->{_buffer};
 }
 
-sub clear
-{
+sub clear {
    my ($this) = @_;
 
    $this->{_index}  = 0;
@@ -779,8 +742,7 @@ sub clear
    return substr $this->{_buffer}, 0, CORE::length($this->{_buffer}), q{};
 }
 
-sub dump
-{
+sub dump {
    goto &_buffer_dump;
 }
 
@@ -788,8 +750,7 @@ sub dump
 # Debug/error handling methods
 #
 
-sub error
-{
+sub error {
    my $this = shift;
 
    if (@_) {
@@ -807,13 +768,11 @@ sub error
    return $this->{_error} || q{};
 }
 
-sub debug
-{
+sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
-sub AUTOLOAD
-{
+sub AUTOLOAD {
    my ($this) = @_;
 
    return if $AUTOLOAD =~ /::DESTROY$/;
@@ -838,8 +797,7 @@ sub AUTOLOAD
 # Basic Encoding Rules (BER) prepare methods
 #
 
-sub _prepare_type_length
-{
+sub _prepare_type_length {
 #  my ($this, $type, $value) = @_;
 
    if (!defined $_[1]) {
@@ -859,8 +817,7 @@ sub _prepare_type_length
    return $_[0]->_error('Unable to prepare the ASN.1 length');
 }
 
-sub _prepare_integer
-{
+sub _prepare_integer {
    my ($this, $value) = @_;
 
    if (!defined $value) {
@@ -883,8 +840,7 @@ sub _prepare_integer
    return $this->_prepare_integer32(INTEGER, $value);
 }
 
-sub _prepare_unsigned32
-{
+sub _prepare_unsigned32 {
    my ($this, $type, $value) = @_;
 
    if (!defined $value) {
@@ -908,8 +864,7 @@ sub _prepare_unsigned32
    return $this->_prepare_integer32($type, $value);
 }
 
-sub _prepare_integer32
-{
+sub _prepare_integer32 {
    my ($this, $type, $value) = @_;
 
    # Determine if the value is positive or negative
@@ -954,8 +909,7 @@ sub _prepare_integer32
    return $this->_prepare_type_length($type, $bytes);
 }
 
-sub _prepare_octet_string
-{
+sub _prepare_octet_string {
    my ($this, $value) = @_;
 
    if (!defined $value) {
@@ -965,13 +919,11 @@ sub _prepare_octet_string
    return $this->_prepare_type_length(OCTET_STRING, $value);
 }
 
-sub _prepare_null
-{
+sub _prepare_null {
    return $_[0]->_prepare_type_length(NULL, q{});
 }
 
-sub _prepare_object_identifier
-{
+sub _prepare_object_identifier {
    my ($this, $value) = @_;
 
    if (!defined $value) {
@@ -1062,13 +1014,11 @@ sub _prepare_object_identifier
    return $this->_prepare_type_length(OBJECT_IDENTIFIER, pack 'w*', @subids);
 }
 
-sub _prepare_sequence
-{
+sub _prepare_sequence {
    return $_[0]->_prepare_implicit_sequence(SEQUENCE, $_[1]);
 }
 
-sub _prepare_implicit_sequence
-{
+sub _prepare_implicit_sequence {
    my ($this, $type, $value) = @_;
 
    if (defined $value) {
@@ -1089,8 +1039,7 @@ sub _prepare_implicit_sequence
    return $this->_error('Unable to prepare the ASN.1 SEQUENCE length');
 }
 
-sub _prepare_ipaddress
-{
+sub _prepare_ipaddress {
    my ($this, $value) = @_;
 
    if (!defined $value) {
@@ -1113,23 +1062,19 @@ sub _prepare_ipaddress
    return $this->_prepare_type_length(IPADDRESS, pack 'C4', @octets);
 }
 
-sub _prepare_counter
-{
+sub _prepare_counter {
    return $_[0]->_prepare_unsigned32(COUNTER, $_[1]);
 }
 
-sub _prepare_gauge
-{
+sub _prepare_gauge {
    return $_[0]->_prepare_unsigned32(GAUGE, $_[1]);
 }
 
-sub _prepare_timeticks
-{
+sub _prepare_timeticks {
    return $_[0]->_prepare_unsigned32(TIMETICKS, $_[1]);
 }
 
-sub _prepare_opaque
-{
+sub _prepare_opaque {
    my ($this, $value) = @_;
 
    if (!defined $value) {
@@ -1139,8 +1084,7 @@ sub _prepare_opaque
    return $this->_prepare_type_length(OPAQUE, $value);
 }
 
-sub _prepare_counter64
-{
+sub _prepare_counter64 {
    my ($this, $value) = @_;
 
    # Validate the SNMP version
@@ -1195,8 +1139,7 @@ sub _prepare_counter64
    return $this->_prepare_type_length(COUNTER64, pack 'C*', @bytes);
 }
 
-sub _prepare_nosuchobject
-{
+sub _prepare_nosuchobject {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1206,8 +1149,7 @@ sub _prepare_nosuchobject
    return $this->_prepare_type_length(NOSUCHOBJECT, q{});
 }
 
-sub _prepare_nosuchinstance
-{
+sub _prepare_nosuchinstance {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1219,8 +1161,7 @@ sub _prepare_nosuchinstance
    return $this->_prepare_type_length(NOSUCHINSTANCE, q{});
 }
 
-sub _prepare_endofmibview
-{
+sub _prepare_endofmibview {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1230,28 +1171,23 @@ sub _prepare_endofmibview
    return $this->_prepare_type_length(ENDOFMIBVIEW, q{});
 }
 
-sub _prepare_get_request
-{
+sub _prepare_get_request {
    return $_[0]->_prepare_implicit_sequence(GET_REQUEST, $_[1]);
 }
 
-sub _prepare_get_next_request
-{
+sub _prepare_get_next_request {
    return $_[0]->_prepare_implicit_sequence(GET_NEXT_REQUEST, $_[1]);
 }
 
-sub _prepare_get_response
-{
+sub _prepare_get_response {
    return $_[0]->_prepare_implicit_sequence(GET_RESPONSE, $_[1]);
 }
 
-sub _prepare_set_request
-{
+sub _prepare_set_request {
    return $_[0]->_prepare_implicit_sequence(SET_REQUEST, $_[1]);
 }
 
-sub _prepare_trap
-{
+sub _prepare_trap {
    my ($this, $value) = @_;
 
    if ($this->{_version} != SNMP_VERSION_1) {
@@ -1261,8 +1197,7 @@ sub _prepare_trap
    return $this->_prepare_implicit_sequence(TRAP, $value);
 }
 
-sub _prepare_get_bulk_request
-{
+sub _prepare_get_bulk_request {
    my ($this, $value) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1274,8 +1209,7 @@ sub _prepare_get_bulk_request
    return $this->_prepare_implicit_sequence(GET_BULK_REQUEST, $value);
 }
 
-sub _prepare_inform_request
-{
+sub _prepare_inform_request {
    my ($this, $value) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1285,8 +1219,7 @@ sub _prepare_inform_request
    return $this->_prepare_implicit_sequence(INFORM_REQUEST, $value);
 }
 
-sub _prepare_v2_trap
-{
+sub _prepare_v2_trap {
    my ($this, $value) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1296,8 +1229,7 @@ sub _prepare_v2_trap
    return $this->_prepare_implicit_sequence(SNMPV2_TRAP, $value);
 }
 
-sub _prepare_report
-{
+sub _prepare_report {
    my ($this, $value) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1307,8 +1239,7 @@ sub _prepare_report
    return $this->_prepare_implicit_sequence(REPORT, $value);
 }
 
-sub _process_null
-{
+sub _process_null {
    my ($this) = @_;
 
    # Decode the length
@@ -1324,8 +1255,7 @@ sub _process_null
    return q{};
 }
 
-sub _process_nosuchobject
-{
+sub _process_nosuchobject {
    my ($this) = @_;
 
    # Verify the SNMP version
@@ -1351,8 +1281,7 @@ sub _process_nosuchobject
    return q{};
 }
 
-sub _process_nosuchinstance
-{
+sub _process_nosuchinstance {
    my ($this) = @_;
 
    # Verify the SNMP version
@@ -1380,8 +1309,7 @@ sub _process_nosuchinstance
    return q{};
 }
 
-sub _process_endofmibview
-{
+sub _process_endofmibview {
    my ($this) = @_;
 
    # Verify the SNMP version
@@ -1407,8 +1335,7 @@ sub _process_endofmibview
    return q{};
 }
 
-sub _process_pdu_type
-{
+sub _process_pdu_type {
    my ($this, $type) = @_;
 
    # Generic methods used to process the PDU type.  The ASN.1 type is
@@ -1417,28 +1344,23 @@ sub _process_pdu_type
    return defined($this->_process_length()) ? $type : $this->_error();
 }
 
-sub _process_get_request
-{
+sub _process_get_request {
    goto &_process_pdu_type;
 }
 
-sub _process_get_next_request
-{
+sub _process_get_next_request {
    goto &_process_pdu_type;
 }
 
-sub _process_get_response
-{
+sub _process_get_response {
    goto &_process_pdu_type;
 }
 
-sub _process_set_request
-{
+sub _process_set_request {
    goto &_process_pdu_type;
 }
 
-sub _process_trap
-{
+sub _process_trap {
    my ($this) = @_;
 
    if ($this->{_version} != SNMP_VERSION_1) {
@@ -1581,50 +1503,46 @@ sub _prepare_var_bind_list
 #
 # Abstract Syntax Notation One (ASN.1) utility functions
 #
-
-{
-   my $types = {
-      INTEGER,            'INTEGER',
-      OCTET_STRING,       'OCTET STRING',
-      NULL,               'NULL',
-      OBJECT_IDENTIFIER,  'OBJECT IDENTIFIER',
-      SEQUENCE,           'SEQUENCE',
-      IPADDRESS,          'IpAddress',
-      COUNTER,            'Counter',
-      GAUGE,              'Gauge',
-      TIMETICKS,          'TimeTicks',
-      OPAQUE,             'Opaque',
-      COUNTER64,          'Counter64',
-      NOSUCHOBJECT,       'noSuchObject',
-      NOSUCHINSTANCE,     'noSuchInstance',
-      ENDOFMIBVIEW,       'endOfMibView',
-      GET_REQUEST,        'GetRequest-PDU',
-      GET_NEXT_REQUEST,   'GetNextRequest-PDU',
-      GET_RESPONSE,       'GetResponse-PDU',
-      SET_REQUEST,        'SetRequest-PDU',
-      TRAP,               'Trap-PDU',
-      GET_BULK_REQUEST,   'GetBulkRequest-PDU',
-      INFORM_REQUEST,     'InformRequest-PDU',
-      SNMPV2_TRAP,        'SNMPv2-Trap-PDU',
-      REPORT,             'Report-PDU'
+sub asn1_itoa {
+   state $types = {
+      INTEGER           => 'INTEGER',
+      OCTET_STRING      => 'OCTET STRING',
+      NULL              => 'NULL',
+      OBJECT_IDENTIFIER => 'OBJECT IDENTIFIER',
+      SEQUENCE          => 'SEQUENCE',
+      IPADDRESS         => 'IpAddress',
+      COUNTER           => 'Counter',
+      GAUGE             => 'Gauge',
+      TIMETICKS         => 'TimeTicks',
+      OPAQUE            => 'Opaque',
+      COUNTER64         => 'Counter64',
+      NOSUCHOBJECT      => 'noSuchObject',
+      NOSUCHINSTANCE    => 'noSuchInstance',
+      ENDOFMIBVIEW      => 'endOfMibView',
+      GET_REQUEST       => 'GetRequest-PDU',
+      GET_NEXT_REQUEST  => 'GetNextRequest-PDU',
+      GET_RESPONSE      => 'GetResponse-PDU',
+      SET_REQUEST       => 'SetRequest-PDU',
+      TRAP              => 'Trap-PDU',
+      GET_BULK_REQUEST  => 'GetBulkRequest-PDU',
+      INFORM_REQUEST    => 'InformRequest-PDU',
+      SNMPV2_TRAP       => 'SNMPv2-Trap-PDU',
+      REPORT            => 'Report-PDU',
    };
 
-   sub asn1_itoa
-   {
-      my ($type) = @_;
+   my ($type) = @_;
 
-      return q{??} if (@_ != 1);
+   return q{??} if (@_ != 1);
 
-      if (!exists $types->{$type}) {
-         return sprintf '?? [0x%02x]', $type;
-      }
-
-      return $types->{$type};
+   if (!exists $types->{$type}) {
+      return sprintf '?? [0x%02x]', $type;
    }
+
+   return $types->{$type};
 }
 
-sub asn1_ticks_to_time
-{
+### XXX: Switch to (Date)?Time::Duration, or would that be too slow? ###
+sub asn1_ticks_to_time {
    my $ticks = shift || 0;
 
    my $days = int($ticks / (24 * 60 * 60 * 100));
@@ -1656,8 +1574,7 @@ sub asn1_ticks_to_time
 # Error handlers
 #
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    if (!defined $this->{_error}) {
@@ -1671,8 +1588,7 @@ sub _error
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    return $_[0]->{_error} = undef;
 }
 
@@ -1680,8 +1596,7 @@ sub _error_clear
 # Buffer manipulation methods
 #
 
-sub _buffer_put
-{
+sub _buffer_put {
 #  my ($this, $value) = @_;
 
    return $_[0]->_error() if defined $_[0]->{_error};
@@ -1698,8 +1613,7 @@ sub _buffer_put
    return $_[0]->{_buffer};
 }
 
-sub _buffer_dump
-{
+sub _buffer_dump {
    my ($this) = @_;
 
    return $DEBUG if (!$DEBUG);
@@ -1720,8 +1634,7 @@ sub _buffer_dump
    return $DEBUG;
 }
 
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return $DEBUG if (!$DEBUG);
 
    return printf

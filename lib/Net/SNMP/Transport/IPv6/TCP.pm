@@ -25,7 +25,7 @@ our $VERSION = v3.0.0;
 
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Transport::IPv6 Net::SNMPu::Transport::IPv4::TCP );
+use parent qw( Net::SNMPu::Transport::IPv6 Net::SNMPu::Transport::IPv4::TCP );
 
 ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
 
