@@ -1,23 +1,9 @@
-#! //bin/env perl
+#!perl
 
-# ============================================================================
+use sanity;
+use Net::SNMPu qw( :ALL );
 
-# $Id: trap.pl,v 6.0 2009/09/09 15:05:33 dtown Rel $
-
-# Copyright (c) 2000-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-use warnings;
-
-use Net::SNMP qw( :ALL );
-
-my ($session, $error) = Net::SNMP->session(
+my ($session, $error) = Net::SNMPu->session(
    -hostname  => $ARGV[0] || 'localhost',
    -community => $ARGV[1] || 'public',
    -port      => SNMP_TRAP_PORT,      # Need to use port 162 
@@ -44,7 +30,8 @@ my $result = $session->trap(
 
 if (!defined $result) {
    printf "ERROR: %s.\n", $session->error();
-} else {
+}
+else {
    printf "Trap-PDU sent.\n";
 }
 
@@ -56,7 +43,8 @@ $result = $session->trap(-varbindlist  => \@varbind);
 
 if (!defined $result) {
    printf "ERROR: %s.\n", $session->error();
-} else {
+}
+else {
    printf "Trap-PDU sent.\n";
 }
 
@@ -65,7 +53,7 @@ $session->close();
 ## Create a new object with the version set to SNMPv2c 
 ## to send a snmpV2-trap.
 
-($session, $error) = Net::SNMP->session(
+($session, $error) = Net::SNMPu->session(
    -hostname  => $ARGV[0] || 'localhost',
    -community => $ARGV[1] || 'public',
    -port      => SNMP_TRAP_PORT,      # Need to use port 162
@@ -88,7 +76,8 @@ $result = $session->snmpv2_trap(
 
 if (!defined $result) {
    printf "ERROR: %s.\n", $session->error();
-} else {
+}
+else {
    printf "SNMPv2-Trap-PDU sent.\n";
 }
 

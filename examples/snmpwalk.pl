@@ -1,21 +1,7 @@
-#! /bin/env perl 
+#!perl
 
-# ============================================================================
-
-# $Id: snmpwalk.pl,v 6.0 2009/09/09 15:05:33 dtown Rel $
-
-# Copyright (c) 2000-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-use warnings;
-
-use Net::SNMP 6.0 qw( :snmp DEBUG_ALL ENDOFMIBVIEW );
+use sanity;
+use Net::SNMPu 6.0 qw( :snmp DEBUG_ALL ENDOFMIBVIEW );
 use Getopt::Std;
 
 our $SCRIPT  = 'snmpwalk';
@@ -38,7 +24,7 @@ if (@ARGV != 2) {
 }
 
 # Create the SNMP session.
-my ($s, $e) = Net::SNMP->session(
+my ($s, $e) = Net::SNMPu->session(
    -hostname => shift,
    exists($OPTS{a}) ? (-authprotocol =>  $OPTS{a}) : (),
    exists($OPTS{A}) ? (-authpassword =>  $OPTS{A}) : (),

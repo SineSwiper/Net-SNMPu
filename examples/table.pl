@@ -1,24 +1,10 @@
-#! /bin/env perl 
+#!perl
 
-# ============================================================================
-
-# $Id: table.pl,v 6.0 2009/09/09 15:05:33 dtown Rel $
-
-# Copyright (c) 2000-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-use warnings;
-
-use Net::SNMP qw( snmp_dispatcher SNMP_PORT );
+use sanity;
+use Net::SNMPu qw( snmp_dispatcher SNMP_PORT );
 
 # Create the SNMP session 
-my ($session, $error) = Net::SNMP->session(
+my ($session, $error) = Net::SNMPu->session(
    -hostname  => $ARGV[0] || 'localhost',
    -community => $ARGV[1] || 'public',
    -port      => $ARGV[2] || SNMP_PORT,
@@ -64,7 +50,7 @@ printf "\n== SNMPv2c non-blocking get_table(): %s ==\n\n", $OID_ifTable;
 $session = undef;
 
 # Create the non-blocking SNMP session
-($session, $error) = Net::SNMP->session(
+($session, $error) = Net::SNMPu->session(
    -hostname    => $ARGV[0] || 'localhost',
    -community   => $ARGV[1] || 'public',
    -port        => $ARGV[2] || SNMP_PORT,

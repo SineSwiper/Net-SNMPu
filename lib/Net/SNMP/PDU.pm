@@ -1,21 +1,8 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::PDU;
 
-# $Id: PDU.pm,v 3.1 2010/09/10 00:01:22 dtown Rel $
+# ABSTRACT: Object used to represent a SNMP PDU. 
 
-# Object used to represent a SNMP PDU. 
-
-# Copyright (c) 2001-2010 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
+use sanity;
 
 use Net::SNMPu::Message qw( 
    :types :versions asn1_itoa ENTERPRISE_SPECIFIC TRUE FALSE DEBUG_INFO 
@@ -23,13 +10,9 @@ use Net::SNMPu::Message qw(
 
 use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 DOMAIN_TCPIPV4 );
 
-## Version of the Net::SNMPu::PDU module
-
-our $VERSION = v3.0.1;
-
 ## Handle importing/exporting of symbols
 
-use base qw( Net::SNMPu::Message );
+use parent 'Net::SNMPu::Message';
 
 sub import
 {
@@ -526,7 +509,6 @@ sub var_bind_list
    return if defined $this->{_error};
 
    if (@_ > 1) {
-
       # The VarBindList HASH is being updated from an external
       # source.  We need to update the VarBind names ARRAY to
       # correspond to the new keys of the HASH.  If the updated
@@ -547,16 +529,7 @@ sub var_bind_list
 
          $this->{_var_bind_list} = $vbl;
 
-         @{$this->{_var_bind_names}} =
-            map  { $_->[0] }
-               sort { $a->[1] cmp $b->[1] }
-                  map
-                  {
-                     my $oid = $_;
-                     $oid =~ s/^\.//;
-                     $oid =~ s/ /\.0/g;
-                     [$_, pack 'N*', split m/\./, $oid]
-                  } keys %{$vbl};
+         @{$this->{_var_bind_names}} = $this->oid_lex_sort(keys %$vbl);
 
          if (!defined($types) || (ref($types) ne 'HASH')) {
              $types = {};
@@ -699,91 +672,8 @@ sub _prepare_pdu_sequence
    return TRUE;
 }
 
-sub _prepare_var_bind_list
-{
-   my ($this, $var_bind) = @_;
-
-   # The passed array is expected to consist of groups of four values
-   # consisting of two sets of ASN.1 types and their values.
-
-   if (@{$var_bind} % 4) {
-      $this->var_bind_list(undef);
-      return $this->_error(
-         'The VarBind list size of %d is not a factor of 4', scalar @{$var_bind}
-      );
-   }
-
-   # Initialize the "var_bind_*" data.
-
-   $this->{_var_bind_list}  = {};
-   $this->{_var_bind_names} = [];
-   $this->{_var_bind_types} = {};
-
-   # Use the object's buffer to build each VarBind SEQUENCE and then append
-   # it to a local buffer.  The local buffer will then be used to create 
-   # the VarBindList SEQUENCE.
-
-   my ($buffer, $name_type, $name_value, $syntax_type, $syntax_value) = (q{});
-
-   while (@{$var_bind}) {
-
-      # Pull a quartet of ASN.1 types and values from the passed array.
-      ($name_type, $name_value, $syntax_type, $syntax_value) =
-         splice @{$var_bind}, 0, 4;
-
-      # Reverse the order of the fields because prepare() does a prepend.
-
-      # value::=ObjectSyntax
-      if (!defined $this->prepare($syntax_type, $syntax_value)) {
-         $this->var_bind_list(undef);
-         return $this->_error();
-      }
-
-      # name::=ObjectName
-      if ($name_type != OBJECT_IDENTIFIER) {
-         $this->var_bind_list(undef);
-         return $this->_error(
-            'An ObjectName type of 0x%02x was expected, but 0x%02x was found',
-            OBJECT_IDENTIFIER, $name_type
-         );
-      }
-      if (!defined $this->prepare($name_type, $name_value)) {
-         $this->var_bind_list(undef);
-         return $this->_error();
-      }
-
-      # VarBind::=SEQUENCE
-      if (!defined $this->prepare(SEQUENCE)) {
-         $this->var_bind_list(undef);
-         return $this->_error();
-      }
-
-      # Append the VarBind to the local buffer and clear it.
-      $buffer .= $this->clear();
-
-      # Populate the "var_bind_*" data so we can provide consistent
-      # output for the methods regardless of whether we are a request 
-      # or a response PDU.  Make sure the HASH key is unique if in 
-      # case duplicate OBJECT IDENTIFIERs are provided.
-
-      while (exists $this->{_var_bind_list}->{$name_value}) {
-         $name_value .= q{ }; # Pad with spaces
-      }
-
-      $this->{_var_bind_list}->{$name_value}  = $syntax_value;
-      $this->{_var_bind_types}->{$name_value} = $syntax_type;
-      push @{$this->{_var_bind_names}}, $name_value;
-
-   }
-
-   # VarBindList::=SEQUENCE OF VarBind
-   if (!defined $this->prepare(SEQUENCE, $buffer)) {
-      $this->var_bind_list(undef);
-      return $this->_error();
-   }
-
-   return TRUE;
-}
+# sub _prepare_var_bind_list
+# (This has been moved to Net::SNMPu::Message, so that it can benefit from an XS version.)
 
 sub _create_oid_null_pairs
 {

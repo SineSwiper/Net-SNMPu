@@ -1,26 +1,12 @@
-#! /bin/env perl
+#!perl
 
-# ============================================================================
-
-# $Id: example3.pl,v 6.0 2009/09/09 15:05:32 dtown Rel $
-
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-use warnings;
-
-use Net::SNMP qw(:snmp);
+use sanity;
+use Net::SNMPu qw(:snmp);
 
 my $OID_ifTable = '1.3.6.1.2.1.2.2';
 my $OID_ifPhysAddress = '1.3.6.1.2.1.2.2.1.6';
 
-my ($session, $error) = Net::SNMP->session(
+my ($session, $error) = Net::SNMPu->session(
    -hostname    => shift || 'localhost',
    -community   => shift || 'public',
    -nonblocking => 1,

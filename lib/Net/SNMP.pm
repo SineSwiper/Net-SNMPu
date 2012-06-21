@@ -117,6 +117,7 @@ use Net::SNMPu::Dispatcher();
 use Net::SNMPu::PDU qw( :ALL !DEBUG_INFO );
 use Net::SNMPu::Security();
 use Net::SNMPu::Transport qw( :ports );
+use Net::SNMPu::Message();
 
 ## Handle importing/exporting of symbols
 
@@ -2096,31 +2097,7 @@ GetResponse-PDU is no longer in the desired MIB tree branch.
 
 =cut
 
-sub oid_base_match
-{
-   my ($base, $oid) = @_;
-
-   defined $base || return FALSE;
-   defined $oid  || return FALSE;
-
-   $base =~ s/^\.//o;
-   $oid  =~ s/^\.//o;
-
-   $base = pack 'N*', split m/\./, $base;
-   $oid  = pack 'N*', split m/\./, $oid;
-
-   return (substr($oid, 0, length $base) eq $base) ? TRUE : FALSE;
-}
-
-sub oid_context_match
-{
-   require Carp;
-   Carp::croak(
-       'oid_context_match() is obsolete, use oid_base_match() instead'
-   );
-
-   goto &oid_base_match;
-}
+sub oid_base_match { return Net::SNMPu::Message->oid_base_match(@_); }
 
 =head2 oid_lex_cmp() - compare two OBJECT IDENTIFIERs lexicographically
 
@@ -2132,18 +2109,7 @@ equal, or less than $oid2.
 
 =cut 
 
-sub oid_lex_cmp
-{
-   my ($aa, $bb) = @_;
-
-   for ($aa, $bb) {
-      s/^\.//;
-      s/ /\.0/g;
-      $_ = pack 'N*', split m/\./;
-   }
-
-   return $aa cmp $bb;
-}
+sub oid_lex_cmp { return Net::SNMPu::Message->oid_lex_cmp(@_); }
 
 =head2 oid_lex_sort() - sort a list of OBJECT IDENTIFIERs lexicographically
 
@@ -2154,22 +2120,7 @@ the listed sorted in lexicographical order.
 
 =cut
 
-sub oid_lex_sort
-{
-   if (@_ <= 1) {
-      return @_;
-   }
-
-   return map { $_->[0] }
-             sort { $a->[1] cmp $b->[1] }
-                map
-                {
-                   my $oid = $_;
-                   $oid =~ s/^\.//;
-                   $oid =~ s/ /\.0/g;
-                   [$_, pack 'N*', split m/\./, $oid]
-                } @_;
-}
+sub oid_lex_sort { return Net::SNMPu::Message->oid_lex_sort(@_); }
 
 =head2 snmp_type_ntop() - convert an ASN.1 type to presentation format
 
