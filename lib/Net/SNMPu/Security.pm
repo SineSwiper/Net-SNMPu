@@ -1,36 +1,18 @@
-# -*- mode: perl -*-
-# ============================================================================
-
 package Net::SNMPu::Security;
 
-# $Id: Security.pm,v 2.0 2009/09/09 15:05:33 dtown Rel $
+# ABSTRACT: Base object that implements the Net::SNMPu Security Models.
 
-# Base object that implements the Net::SNMPu Security Models.
+use sanity;
+use Class::Load;
 
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
+## Handle importing/exporting of symbols
 
 use Net::SNMPu::Message qw(
    :securityLevels :securityModels :versions TRUE FALSE 
 );
-
-## Version of the Net::SNMPu::Security module
-
-our $VERSION = v2.0.0;
-
-## Handle importing/exporting of symbols
-
-use parent qw( Exporter );
+use parent 'Exporter';
 
 our @EXPORT_OK = qw( DEBUG_INFO );
-
 our %EXPORT_TAGS = (
    levels => [
       qw( SECURITY_LEVEL_NOAUTHNOPRIV SECURITY_LEVEL_AUTHNOPRIV
@@ -49,15 +31,11 @@ $EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 ## Package variables
 
 our $DEBUG = FALSE;  # Debug flag
-
 our $AUTOLOAD;       # Used by the AUTOLOAD method
-
-#perl2exe_include    Net::SNMPu::Security::USM
 
 # [public methods] -----------------------------------------------------------
 
-sub new
-{
+sub new {
    my ($class, %argv) = @_;
 
    my $version = SNMP_VERSION_1;
@@ -81,8 +59,8 @@ sub new
    # present, we gracefully return an error.
 
    if ($version == SNMP_VERSION_3) {
-
-      if (defined(my $error = load_module('Net::SNMPu::Security::USM'))) {
+      my ($s, $error) = Class::Load::try_load_module('Net::SNMPu::Security::USM');
+      if ($error) {
          $error = 'SNMPv3 support is unavailable ' . $error;
          return wantarray ? (undef, $error) : undef;
       }
@@ -96,8 +74,7 @@ sub new
    return  Net::SNMPu::Security::Community->new(%argv);
 }
 
-sub version
-{
+sub version {
    my ($this) = @_;
 
    if (@_ > 1) {
@@ -108,42 +85,22 @@ sub version
    return $this->{_version};
 }
 
-sub discovered
-{
-   return TRUE;
-}
+use constant {
+   discovered     => TRUE,
+   security_model => SECURITY_MODEL_ANY,           # RFC 3411 - SnmpSecurityModel::=TEXTUAL-CONVENTION
+   security_level => SECURITY_LEVEL_NOAUTHNOPRIV,  # RFC 3411 - SnmpSecurityLevel::=TEXTUAL-CONVENTION
+   security_name  => q{},
+};
 
-sub security_model
-{
-   # RFC 3411 - SnmpSecurityModel::=TEXTUAL-CONVENTION
-
-   return SECURITY_MODEL_ANY;
-}
-
-sub security_level
-{
-   # RFC 3411 - SnmpSecurityLevel::=TEXTUAL-CONVENTION
-
-   return SECURITY_LEVEL_NOAUTHNOPRIV;
-}
-
-sub security_name
-{
-   return q{};
-}
-
-sub debug
-{
+sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
-sub error
-{
+sub error {
    return $_[0]->{_error} || q{};
 }
 
-sub AUTOLOAD
-{
+sub AUTOLOAD {
    my ($this) = @_;
 
    return if $AUTOLOAD =~ /::DESTROY$/;
@@ -166,8 +123,7 @@ sub AUTOLOAD
 
 # [private methods] ----------------------------------------------------------
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    if (!defined $this->{_error}) {
@@ -181,48 +137,11 @@ sub _error
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    return $_[0]->{_error} = undef;
 }
 
-{
-   my %modules;
-
-   sub load_module
-   {
-      my ($module) = @_;
-
-      # We attempt to load the required module under the protection of an
-      # eval statement.  If there is a failure, typically it is due to a
-      # missing module required by the requested module and we attempt to
-      # simplify the error message by just listing that module.  We also
-      # need to track failures since require() only produces an error on
-      # the first attempt to load the module.
-
-      # NOTE: Contrary to our typical convention, a return value of "undef"
-      # actually means success and a defined value means error.
-
-      return $modules{$module} if exists $modules{$module};
-
-      if (!eval "require $module") {
-         if ($@ =~ m/locate (\S+\.pm)/) {
-            $modules{$module} = err_msg('(Required module %s not found)', $1);
-         } elsif ($@ =~ m/(.*)\n/) {
-            $modules{$module} = err_msg('(%s)', $1);
-         } else {
-            $modules{$module} = err_msg('(%s)', $@);
-         }
-      } else {
-         $modules{$module} = undef;
-      }
-
-      return $modules{$module};
-   }
-}
-
-sub err_msg
-{
+sub err_msg {
    my $msg = (@_ > 1) ? sprintf(shift(@_), @_) : $_[0];
 
    if ($DEBUG) {
@@ -232,8 +151,7 @@ sub err_msg
    return $msg;
 }
 
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return if (!$DEBUG);
 
    return printf

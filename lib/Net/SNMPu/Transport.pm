@@ -28,14 +28,12 @@ $EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 ## Transport Layer Domain definitions
 use constant {
 
-# RFC 3417 Transport Mappings for SNMP
-# Presuhn, Case, McCloghrie, Rose, and Waldbusser; December 2002
-
+   # RFC 3417 Transport Mappings for SNMP
+   # Presuhn, Case, McCloghrie, Rose, and Waldbusser; December 2002
    DOMAIN_UDP => '1.3.6.1.6.1.1',  # snmpUDPDomain
 
-# RFC 3419 Textual Conventions for Transport Addresses
-# Consultant, Schoenwaelder, and Braunschweig; December 2002
-
+   # RFC 3419 Textual Conventions for Transport Addresses
+   # Consultant, Schoenwaelder, and Braunschweig; December 2002
    DOMAIN_UDPIPV4  => '1.3.6.1.2.1.100.1.1',  # transportDomainUdpIpv4
    DOMAIN_UDPIPV6  => '1.3.6.1.2.1.100.1.2',  # transportDomainUdpIpv6
    DOMAIN_UDPIPV6Z => '1.3.6.1.2.1.100.1.4',  # transportDomainUdpIpv6z
@@ -43,13 +41,11 @@ use constant {
    DOMAIN_TCPIPV6  => '1.3.6.1.2.1.100.1.6',  # transportDomainTcpIpv6
    DOMAIN_TCPIPV6Z => '1.3.6.1.2.1.100.1.8',  # transportDomainTcpIpv6z
    
-## SNMP well-known ports
-   
+   ## SNMP well-known ports
    SNMP_PORT            => 161,
    SNMP_TRAP_PORT       => 162,
    
-## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
-   
+   ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
    MSG_SIZE_DEFAULT     =>   484,
    MSG_SIZE_MINIMUM     =>   484,
    MSG_SIZE_MAXIMUM     => 65535,  # 2147483647 is not reasonable
@@ -66,117 +62,109 @@ use constant {
    MAX_REQUESTS_MINIMUM =>     0,
    MAX_REQUESTS_MAXIMUM => 65535,
    
-## Truth values
-   
+   ## Truth values
    TRUE                 =>   1,
    FALSE                =>   0,
    
-## Shared socket array indexes
-   
+   ## Shared socket array indexes
    _SHARED_SOCKET       =>   0,   # Shared Socket object
    _SHARED_REFC         =>   1,   # Reference count
    _SHARED_MAXSIZE      =>   2,   # Shared maxMsgSize
 };
 
 ## Package variables
-
 our $DEBUG = FALSE;                 # Debug flag
 our $AUTOLOAD;                      # Used by the AUTOLOAD method
 our $SOCKETS = {};                  # List of shared sockets
 
 # [public methods] -----------------------------------------------------------
 
-{
-   my $domains = {
-      'udp/?(?:ip)?v?4?',          DOMAIN_UDPIPV4,
-      quotemeta DOMAIN_UDP,        DOMAIN_UDPIPV4,
-      quotemeta DOMAIN_UDPIPV4,    DOMAIN_UDPIPV4,
+sub new {
+   my ($class, %argv) = @_;
 
-      'udp/?(?:ip)?v?6',           DOMAIN_UDPIPV6,
-      quotemeta DOMAIN_UDPIPV6,    DOMAIN_UDPIPV6,
-      quotemeta DOMAIN_UDPIPV6Z,   DOMAIN_UDPIPV6,
+   state $domains = {
+      'udp/?(?:ip)?v?4?'        => DOMAIN_UDPIPV4,
+      quotemeta DOMAIN_UDP      => DOMAIN_UDPIPV4,
+      quotemeta DOMAIN_UDPIPV4  => DOMAIN_UDPIPV4,
 
-      'tcp/?(?:ip)?v?4?',          DOMAIN_TCPIPV4,
-      quotemeta DOMAIN_TCPIPV4,    DOMAIN_TCPIPV4,
+      'udp/?(?:ip)?v?6'         => DOMAIN_UDPIPV6,
+      quotemeta DOMAIN_UDPIPV6  => DOMAIN_UDPIPV6,
+      quotemeta DOMAIN_UDPIPV6Z => DOMAIN_UDPIPV6,
 
-      'tcp/?(?:ip)?v?6',           DOMAIN_TCPIPV6,
-      quotemeta DOMAIN_TCPIPV6,    DOMAIN_TCPIPV6,
-      quotemeta DOMAIN_TCPIPV6Z,   DOMAIN_TCPIPV6,
+      'tcp/?(?:ip)?v?4?'        => DOMAIN_TCPIPV4,
+      quotemeta DOMAIN_TCPIPV4  => DOMAIN_TCPIPV4,
+
+      'tcp/?(?:ip)?v?6'         => DOMAIN_TCPIPV6,
+      quotemeta DOMAIN_TCPIPV6  => DOMAIN_TCPIPV6,
+      quotemeta DOMAIN_TCPIPV6Z => DOMAIN_TCPIPV6,
    };
+   
+   my ($s, $error);
+   my $domain = DOMAIN_UDPIPV4;
 
-   sub new
-   {
-      my ($class, %argv) = @_;
+   # See if a Transport Layer Domain argument has been passed.
 
-      my $domain = DOMAIN_UDPIPV4;
-      my $error  = q{};
+   for (keys %argv) {
 
-      # See if a Transport Layer Domain argument has been passed.
+      if (/^-?domain$/i) {
 
-      for (keys %argv) {
+         my $key = $argv{$_};
+         $domain = undef;
 
-         if (/^-?domain$/i) {
-
-            my $key = $argv{$_};
-            $domain = undef;
-
-            for (keys %{$domains}) {
-               if ($key =~ /^$_$/i) {
-                  $domain = $domains->{$_};
-                  last;
-               }
+         for (keys %{$domains}) {
+            if ($key =~ /^$_$/i) {
+               $domain = $domains->{$_};
+               last;
             }
-
-            if (!defined $domain) {
-               $error = err_msg(
-                  'The transport domain "%s" is unknown', $argv{$_}
-               );
-               return wantarray ? (undef, $error) : undef;
-            }
-
-            $argv{$_} = $domain;
          }
 
+         if (!defined $domain) {
+            $error = err_msg(
+               'The transport domain "%s" is unknown', $argv{$_}
+            );
+            return wantarray ? (undef, $error) : undef;
+         }
+
+         $argv{$_} = $domain;
       }
 
-      # Return the appropriate object based on the Transport Domain.  To
-      # avoid consuming unnecessary resources, only load the appropriate
-      # module when requested.   Some modules require non-core modules and
-      # if these modules are not present, we gracefully return an error. 
+   }
 
-      my ($s, $error);
-      for ($domain) {
-         when (DOMAIN_UDPIPV6) {
-            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::UDP');
-            if ($error) {
-               $error = 'UDP/IPv6 support is unavailable ' . $error;
-               return wantarray ? (undef, $error) : undef;
-            }
-            return Net::SNMPu::Transport::IPv6::UDP->new(%argv);
+   # Return the appropriate object based on the Transport Domain.  To
+   # avoid consuming unnecessary resources, only load the appropriate
+   # module when requested.   Some modules require non-core modules and
+   # if these modules are not present, we gracefully return an error. 
+
+   for ($domain) {
+      when (DOMAIN_UDPIPV6) {
+         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::UDP');
+         if ($error) {
+            $error = 'UDP/IPv6 support is unavailable ' . $error;
+            return wantarray ? (undef, $error) : undef;
          }
-         when (DOMAIN_TCPIPV6) {
-            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::TCP');
-            if ($error) {
-               $error = 'TCP/IPv6 support is unavailable ' . $error;
-               return wantarray ? (undef, $error) : undef;
-            }
-            return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
-         }
-         when (DOMAIN_TCPIPV4) {
-            ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv4::TCP');
-            if ($error) {
-               $error = 'TCP/IPv4 support is unavailable ' . $error;
-               return wantarray ? (undef, $error) : undef;
-            }
-            return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
-         }
-         # Load the default Transport Domain module without eval protection.
-         default {
-            require Net::SNMPu::Transport::IPv4::UDP;
-            return  Net::SNMPu::Transport::IPv4::UDP->new(%argv);
-         }
+         return Net::SNMPu::Transport::IPv6::UDP->new(%argv);
       }
-
+      when (DOMAIN_TCPIPV6) {
+         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::TCP');
+         if ($error) {
+            $error = 'TCP/IPv6 support is unavailable ' . $error;
+            return wantarray ? (undef, $error) : undef;
+         }
+         return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
+      }
+      when (DOMAIN_TCPIPV4) {
+         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv4::TCP');
+         if ($error) {
+            $error = 'TCP/IPv4 support is unavailable ' . $error;
+            return wantarray ? (undef, $error) : undef;
+         }
+         return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
+      }
+      # Load the default Transport Domain module without eval protection.
+      default {
+         require Net::SNMPu::Transport::IPv4::UDP;
+         return  Net::SNMPu::Transport::IPv4::UDP->new(%argv);
+      }
    }
 
 }
@@ -294,13 +282,16 @@ sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
-sub agent_addr     { return '0.0.0.0'; }
-sub connectionless { return TRUE; }
-sub domain         { return '0.0'; }
-sub error          { return $_[0]->{_error} || q{}; }
-sub fileno         { return defined($_[0]->{_socket}) ? $_[0]->{_socket}->fileno() : undef; }
-sub socket         { return $_[0]->{_socket}; }
-sub type           { return '<unknown>'; }  # unknown(0)
+use constant {
+   agent_addr     => '0.0.0.0',
+   connectionless => TRUE,
+   domain         => '0.0',
+   type           => '<unknown>',  # unknown(0)
+};
+
+sub error  { return $_[0]->{_error} || q{}; }
+sub fileno { return defined($_[0]->{_socket}) ? $_[0]->{_socket}->fileno() : undef; }
+sub socket { return $_[0]->{_socket}; }
 
 sub sock_name {
    if (defined $_[0]->{_socket}) {
@@ -355,28 +346,23 @@ sub dest_addr {
    return $_[0]->_addr($_[0]->dest_name());
 }
 
-sub dest_port
-{
+sub dest_port {
    return $_[0]->_port($_[0]->dest_name());
 }
 
-sub dest_taddress
-{
+sub dest_taddress {
    return $_[0]->_taddress($_[0]->dest_name());
 }
 
-sub dest_taddr
-{
+sub dest_taddr {
    return $_[0]->_taddr($_[0]->dest_name());
 }
 
-sub dest_tdomain
-{
+sub dest_tdomain {
    return $_[0]->_tdomain($_[0]->dest_name());
 }
 
-sub peer_name
-{
+sub peer_name {
    if (defined $_[0]->{_socket}) {
       return $_[0]->{_socket}->peername() || $_[0]->dest_name();
    } else {
@@ -384,38 +370,31 @@ sub peer_name
    }
 }
 
-sub peer_hostname
-{
+sub peer_hostname {
    return $_[0]->peer_address();
 }
 
-sub peer_address
-{
+sub peer_address {
    return $_[0]->_address($_[0]->peer_name());
 }
 
-sub peer_addr
-{
+sub peer_addr {
    return $_[0]->_addr($_[0]->peer_name());
 }
 
-sub peer_port
-{
+sub peer_port {
    return $_[0]->_port($_[0]->peer_name());
 }
 
-sub peer_taddress
-{
+sub peer_taddress {
    return $_[0]->_taddress($_[0]->peer_name());
 }
 
-sub peer_taddr
-{
+sub peer_taddr {
    return $_[0]->_taddr($_[0]->peer_name());
 }
 
-sub peer_tdomain
-{
+sub peer_tdomain {
    return $_[0]->_tdomain($_[0]->peer_name());
 }
 
@@ -705,9 +684,7 @@ sub _shared_max_size {
    return $SOCKETS->{$this->{_sock_name}}->[_SHARED_MAXSIZE];
 }
 
-sub _msg_size_default {
-   return MSG_SIZE_DEFAULT;
-}
+use constant _msg_size_default => MSG_SIZE_DEFAULT;
 
 sub _error {
    my $this = shift;

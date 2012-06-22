@@ -1,7 +1,6 @@
+use Test::Most;
+use Class::Load;
 use sanity;
-use Test::More;
-
-plan tests => 14
 
 use Net::SNMPu::Message qw(SEQUENCE OCTET_STRING FALSE);
 
@@ -9,67 +8,58 @@ use Net::SNMPu::Message qw(SEQUENCE OCTET_STRING FALSE);
 # Load the Net::SNMPu::Security::USM module
 #
 
-eval 'use Net::SNMPu::Security::USM';
-
-my $skip = ($@ =~ /locate (:?\S+\.pm)/) ? $@ : FALSE;
+my ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Security::USM');
+if ($error) {
+   die 'Class load failure for Net::SNMPu::Security::USM: '.$error
+      unless ($error =~ /Can't locate \(:?\S+\.pm\) in \@INC/);
+   plan skip_all => "Net::SNMPu::Security::USM doesn't have the required modules";
+}
+plan tests => 34;
+pass('Net::SNMPu::Security::USM loaded');
+my ($u, $e);
 
 #
 # 1. Create the Net::SNMPu::Security::USM object
 #
 
-my ($u, $e);
-
-eval
-{
-   ($u, $e) = Net::SNMPu::Security::USM->new(
-      -username     => 'dtown',
-      -authpassword => 'maplesyrup',
-      -privpassword => 'maplesyrup',
-      -privprotocol => 'des',
-   );
-
-   # "Perform" discovery...
-   $u->_engine_id_discovery(pack 'x11H2', '02');
-
-   # ...and synchronization
-   $u->_synchronize(10, time);
-};
-
-skip(
-   $skip, ($@ || $e), q{}, 'Failed to create Net::SNMPu::Security::USM object'
+($u, $e) = Net::SNMPu::Security::USM->new(
+   -username     => 'dtown',
+   -authpassword => 'maplesyrup',
+   -privpassword => 'maplesyrup',
+   -privprotocol => 'des',
 );
+isa_ok($u, 'Net::SNMPu::Security::USM');
+is($e, '', 'No error on USM->new()');
+
+# "Perform" discovery...
+$u->_engine_id_discovery(pack 'x11H2', '02');
+is($u->error(), '', 'No error on USM->_engine_id_discovery()');
+
+# ...and synchronization
+$u->_synchronize(10, time);
+is($u->error(), '', 'No error on USM->_synchronize()');
 
 #
 # 2. Check the localized authKey
 #
 
-eval
-{
-   $e = unpack 'H*', $u->auth_key();
-};
-
-skip(
-   $skip,
-   ($@ || $e),
-   '526f5eed9fcce26f8964c2930787d82b', # RFC 3414 - A.3.1
-   'Invalid authKey calculated'
+is(
+   unpack('H*', $u->auth_key()),
+   '526f5eed9fcce26f8964c2930787d82b',  # RFC 3414 - A.3.1
+   'Correct authKey calculated',
 );
+is($u->error(), '', 'No error on USM->auth_key()');
 
 #
 # 3. Check the localized privKey
 #
 
-eval
-{
-   $e = unpack 'H*', $u->priv_key();
-};
-
-skip(
-   $skip,
-   ($@ || $e),
+is(
+   unpack('H*', $u->priv_key()),
    '526f5eed9fcce26f8964c2930787d82b',
-   'Invalid privKey calculated'
+   'Correct privKey calculated'
 );
+is($u->error(), '', 'No error on USM->priv_key()');
 
 #
 # 4. Create and initalize a Message
@@ -77,34 +67,31 @@ skip(
 
 my $m;
 
-eval
-{
-   ($m, $e) = Net::SNMPu::Message->new();
-   $m->prepare(SEQUENCE, pack('H*', 'deadbeef') x 8);
-   $e = $m->error();
-};
+($m, $e) = Net::SNMPu::Message->new();
+isa_ok($m, 'Net::SNMPu::Message');
+is($e, '', 'No error on Message->new()');
 
-skip($skip, ($@ || $e), q{}, 'Failed to create Net::SNMPu::Message object');
+$m->prepare(SEQUENCE, pack('H*', 'deadbeef') x 8);
+is($m->error(), '', 'No error on Message->prepare(SEQUENCE)');
 
 #
 # 5. Calculate the HMAC
 #
-
-my $h;
-
-eval
-{
-   $h = unpack 'H*', $u->_auth_hmac($m);
-};
-
-skip($skip, $@, q{}, 'Calculate the HMAC failed');
+my ($h, $h2);
+ok(
+   ( $h = unpack('H*', $u->_auth_hmac($m)) ),
+   'HMAC calculated'
+);
+is($u->error(), '', 'No error on USM->_auth_hmac()');
 
 #
-# 6. Encrypt/descrypt the Message
+# 6. Encrypt/decrypt the Message
 #
 
-eval
-{
+can_ok($m, qw(length clear append process reference));
+can_ok($u, qw(_encrypt_data _decrypt_data error));
+
+lives_ok {
    my $salt;
    my $len = $m->length();
    my $buff = $m->clear();
@@ -115,110 +102,88 @@ eval
    if ($len -= $m->length()) {
       substr ${$m->reference()}, $len, -$len, q{};
    }
-};
-
-skip($skip, ($@ || $e), q{}, 'Privacy failed');
+} 'Encrypt/decrypt privacy (1st test)';
+is($u->error(), '', 'No error on USM->_decrypt_data()');
 
 #
 # 7. Check the HMAC
 #
 
-my $h2;
-
-eval
-{
-   $h2 = unpack 'H*', $u->_auth_hmac($m);
-};
-
-skip($skip, ($@ || $h2), $h, 'Authentication failed');
+ok(
+   ( $h2 = unpack('H*', $u->_auth_hmac($m)) ),
+   'Authentication failed'
+);
+is($u->error(), '', 'No error on USM->_auth_hmac()');
+is($h2, $h, 'HMAC->HMAC matches');
 
 #
 # 8. Create the Net::SNMPu::Security::USM object
 #
 
-eval
-{
-   ($u, $e) = Net::SNMPu::Security::USM->new(
-      -username     => 'dtown',
-      -authpassword => 'maplesyrup',
-      -authprotocol => 'sha',
-      -privpassword => 'maplesyrup',
-      -privprotocol => 'des',
-   );
-
-   # "Perform" discovery...
-   $u->_engine_id_discovery(pack 'x11H2', '02');
-
-   # ...and synchronization
-   $u->_synchronize(10, time);
-};
-
-skip(
-   $skip, ($@ || $e), q{}, 'Failed to create Net::SNMPu::Security::USM object'
+($u, $e) = Net::SNMPu::Security::USM->new(
+   -username     => 'dtown',
+   -authpassword => 'maplesyrup',
+   -authprotocol => 'sha',
+   -privpassword => 'maplesyrup',
+   -privprotocol => 'des',
 );
+isa_ok($u, 'Net::SNMPu::Security::USM');
+is($e, '', 'No error on USM->new(SHA)');
+
+# "Perform" discovery...
+$u->_engine_id_discovery(pack 'x11H2', '02');
+
+# ...and synchronization
+$u->_synchronize(10, time);
 
 #
 # 9. Check the localized authKey
 #
-
-eval
-{
-   $e = unpack 'H*', $u->auth_key();
-};
-
-skip(
-   $skip,
-   ($@ || $e),
-   '6695febc9288e36282235fc7151f128497b38f3f', # RFC 3414 - A.3.2
-   'Invalid authKey calculated'
+is(
+   unpack('H*', $u->auth_key()),
+   '6695febc9288e36282235fc7151f128497b38f3f',  # RFC 3414 - A.3.2
+   'Correct SHA authKey calculated',
 );
 
 #
 # 10. Check the localized privKey
 #
 
-eval
-{
-   $e = unpack 'H*', $u->priv_key();
-};
-
-skip(
-   $skip,
-   ($@ || $e),
+is(
+   unpack('H*', $u->priv_key()),
    '6695febc9288e36282235fc7151f1284',
-   'Invalid privKey calculated'
+   'Correct privKey calculated (auth SHA)'
 );
 
 #
 # 11. Create and initalize a Message
 #
 
-eval
-{
-   ($m, $e) = Net::SNMPu::Message->new();
-   $m->prepare(SEQUENCE, pack('H*', 'deadbeef') x 8);
-   $e = $m->error();
-};
+($m, $e) = Net::SNMPu::Message->new();
+isa_ok($m, 'Net::SNMPu::Message');
+is($e, '', 'No error on Net::SNMPu::Message->new()');
 
-skip($skip, ($@ || $e), q{}, 'Failed to create Net::SNMPu::Message object');
+$m->prepare(SEQUENCE, pack('H*', 'deadbeef') x 8);
+$e = $m->error();
+is($e, '', 'Still no error after prepare(SEQUENCE)');
 
 #
 # 12. Calculate the HMAC
 #
 
-eval
-{
-   $h = unpack 'H*', $u->_auth_hmac($m);
-};
-
-skip($skip, $@, q{}, 'Calculate the HMAC failed');
+ok(
+   ( $h = unpack('H*', $u->_auth_hmac($m)) ),
+   'HMAC calculated (SHA)'
+);
 
 #
-# 13. Encrypt/descrypt the Message
+# 13. Encrypt/decrypt the Message
 #
 
-eval
-{
+can_ok($m, qw(length clear append process reference));
+can_ok($u, qw(_encrypt_data _decrypt_data error));
+
+lives_ok {
    my $salt;
    my $len = $m->length();
    my $buff = $m->clear();
@@ -229,19 +194,16 @@ eval
    if ($len -= $m->length()) {
       substr ${$m->reference()}, $len, -$len, q{};
    }
-};
-
-skip($skip, ($@ || $e), q{}, 'Privacy failed');
+} 'Encrypt/decrypt privacy (SHA)';
 
 #
 # 14. Check the HMAC
 #
 
-eval
-{
-   $h2 = unpack 'H*', $u->_auth_hmac($m);
-};
-
-skip($skip, ($@ || $h2), $h, 'Authentication failed');
+ok(
+   ( $h2 = unpack('H*', $u->_auth_hmac($m)) ),
+   'Authentication failed (SHA)'
+);
+is($h2, $h, 'HMAC->HMAC matches (SHA)');
 
 # ============================================================================

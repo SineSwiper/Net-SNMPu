@@ -3,26 +3,22 @@ package Net::SNMPu::PDU;
 # ABSTRACT: Object used to represent a SNMP PDU. 
 
 use sanity;
-
 use Net::SNMPu::Message qw( 
    :types :versions asn1_itoa ENTERPRISE_SPECIFIC TRUE FALSE DEBUG_INFO 
 );
-
 use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 DOMAIN_TCPIPV4 );
 
 ## Handle importing/exporting of symbols
 
 use parent 'Net::SNMPu::Message';
 
-sub import
-{
+sub import {
    return Net::SNMPu::Message->export_to_level(1, @_);
 }
 
 # [public methods] -----------------------------------------------------------
 
-sub new
-{
+sub new {
    my $class = shift;
 
    # We play some games here to allow us to "convert" a Message into a PDU. 
@@ -84,8 +80,7 @@ sub new
    return wantarray ? ($this, q{}) : $this;
 }
 
-sub prepare_get_request
-{
+sub prepare_get_request {
    my ($this, $oids) = @_;
 
    $this->_error_clear();
@@ -94,8 +89,7 @@ sub prepare_get_request
                              $this->_create_oid_null_pairs($oids));
 }
 
-sub prepare_get_next_request
-{
+sub prepare_get_next_request {
    my ($this, $oids) = @_;
 
    $this->_error_clear();
@@ -104,8 +98,7 @@ sub prepare_get_next_request
                              $this->_create_oid_null_pairs($oids));
 }
 
-sub prepare_get_response
-{
+sub prepare_get_response {
    my ($this, $trios) = @_;
 
    $this->_error_clear();
@@ -114,8 +107,7 @@ sub prepare_get_response
                              $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_set_request
-{
+sub prepare_set_request {
    my ($this, $trios) = @_;
 
    $this->_error_clear();
@@ -124,8 +116,7 @@ sub prepare_set_request
                              $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_trap
-{
+sub prepare_trap {
    my ($this, $enterprise, $addr, $generic, $specific, $time, $trios) = @_;
 
    $this->_error_clear();
@@ -229,8 +220,7 @@ sub prepare_trap
    return $this->prepare_pdu(TRAP, $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_get_bulk_request
-{
+sub prepare_get_bulk_request {
    my ($this, $repeaters, $repetitions, $oids) = @_;
 
    $this->_error_clear();
@@ -299,8 +289,7 @@ sub prepare_get_bulk_request
                              $this->_create_oid_null_pairs($oids));
 }
 
-sub prepare_inform_request
-{
+sub prepare_inform_request {
    my ($this, $trios) = @_;
 
    $this->_error_clear();
@@ -309,8 +298,7 @@ sub prepare_inform_request
                              $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_snmpv2_trap
-{
+sub prepare_snmpv2_trap {
    my ($this, $trios) = @_;
 
    $this->_error_clear();
@@ -319,8 +307,7 @@ sub prepare_snmpv2_trap
                              $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_report
-{
+sub prepare_report {
    my ($this, $trios) = @_;
 
    $this->_error_clear();
@@ -328,8 +315,7 @@ sub prepare_report
    return $this->prepare_pdu(REPORT, $this->_create_oid_value_pairs($trios));
 }
 
-sub prepare_pdu
-{
+sub prepare_pdu {
    my ($this, $type, $var_bind) = @_;
 
    # Clear the buffer
@@ -351,25 +337,21 @@ sub prepare_pdu
    return TRUE;
 }
 
-sub prepare_var_bind_list
-{
+sub prepare_var_bind_list {
    my ($this, $var_bind) = @_;
 
    return $this->_prepare_var_bind_list($var_bind || []);
 }
 
-sub prepare_pdu_sequence
-{
+sub prepare_pdu_sequence {
    goto &_prepare_pdu_sequence;
 }
 
-sub prepare_pdu_scope
-{
+sub prepare_pdu_scope {
    goto &_prepare_pdu_scope;
 }
 
-sub process_pdu
-{
+sub process_pdu {
    my ($this) = @_;
 
    # Clear any errors 
@@ -382,23 +364,19 @@ sub process_pdu
    return $this->_process_var_bind_list();
 }
 
-sub process_pdu_scope
-{
+sub process_pdu_scope {
    goto &_process_pdu_scope;
 }
 
-sub process_pdu_sequence
-{
+sub process_pdu_sequence {
    goto &_process_pdu_sequence;
 }
 
-sub process_var_bind_list
-{
+sub process_var_bind_list {
    goto &_process_var_bind_list;
 }
 
-sub expect_response
-{
+sub expect_response {
    my ($this) = @_;
 
    if (($this->{_pdu_type} == GET_RESPONSE) ||
@@ -412,13 +390,11 @@ sub expect_response
    return TRUE;
 }
 
-sub pdu_type
-{
+sub pdu_type {
    return $_[0]->{_pdu_type};
 }
 
-sub error_status
-{
+sub error_status {
    my ($this, $status) = @_;
 
    # error-status::=INTEGER { noError(0) .. inconsistentName(18) } 
@@ -441,8 +417,7 @@ sub error_status
    return $this->{_error_status} || 0; # noError(0)
 }
 
-sub error_index
-{
+sub error_index {
    my ($this, $index) = @_;
 
    # error-index::=INTEGER (0..max-bindings) 
@@ -463,47 +438,39 @@ sub error_index
    return $this->{_error_index} || 0;
 }
 
-sub non_repeaters
-{
+sub non_repeaters {
    # non-repeaters::=INTEGER (0..max-bindings)
 
    return $_[0]->{_error_status} || 0;
 }
 
-sub max_repetitions
-{
+sub max_repetitions {
    # max-repetitions::=INTEGER (0..max-bindings)
 
    return $_[0]->{_error_index} || 0;
 }
 
-sub enterprise
-{
+sub enterprise {
    return $_[0]->{_enterprise};
 }
 
-sub agent_addr
-{
+sub agent_addr {
    return $_[0]->{_agent_addr};
 }
 
-sub generic_trap
-{
+sub generic_trap {
    return $_[0]->{_generic_trap};
 }
 
-sub specific_trap
-{
+sub specific_trap {
    return $_[0]->{_specific_trap};
 }
 
-sub time_stamp
-{
+sub time_stamp {
    return $_[0]->{_time_stamp};
 }
 
-sub var_bind_list
-{
+sub var_bind_list {
    my ($this, $vbl, $types) = @_;
 
    return if defined $this->{_error};
@@ -547,8 +514,7 @@ sub var_bind_list
    return $this->{_var_bind_list};
 }
 
-sub var_bind_names
-{
+sub var_bind_names {
    my ($this) = @_;
 
    return [] if defined($this->{_error}) || !defined $this->{_var_bind_names};
@@ -556,8 +522,7 @@ sub var_bind_names
    return $this->{_var_bind_names};
 }
 
-sub var_bind_types
-{
+sub var_bind_types {
    my ($this) = @_;
 
    return if defined $this->{_error};
@@ -565,15 +530,13 @@ sub var_bind_types
    return $this->{_var_bind_types};
 }
 
-sub scoped
-{
+sub scoped {
    return $_[0]->{_scoped};
 }
 
 # [private methods] ----------------------------------------------------------
 
-sub _prepare_pdu_scope
-{
+sub _prepare_pdu_scope {
    my ($this) = @_;
 
    return TRUE if (($this->{_version} < SNMP_VERSION_3) || ($this->{_scoped}));
@@ -597,8 +560,7 @@ sub _prepare_pdu_scope
    return $this->{_scoped} = TRUE;
 }
 
-sub _prepare_pdu_sequence
-{
+sub _prepare_pdu_sequence {
    my ($this, $type) = @_;
 
    # Do not do anything if there has already been an error
@@ -675,8 +637,7 @@ sub _prepare_pdu_sequence
 # sub _prepare_var_bind_list
 # (This has been moved to Net::SNMPu::Message, so that it can benefit from an XS version.)
 
-sub _create_oid_null_pairs
-{
+sub _create_oid_null_pairs {
    my ($this, $oids) = @_;
 
    return [] if !defined $oids;
@@ -696,8 +657,7 @@ sub _create_oid_null_pairs
    return $pairs;
 }
 
-sub _create_oid_value_pairs
-{
+sub _create_oid_value_pairs {
    my ($this, $trios) = @_;
 
    return [] if !defined $trios;
@@ -722,8 +682,7 @@ sub _create_oid_value_pairs
    return $pairs;
 }
 
-sub _process_pdu_scope
-{
+sub _process_pdu_scope {
    my ($this) = @_;
 
    return TRUE if ($this->{_version} < SNMP_VERSION_3);
@@ -745,8 +704,7 @@ sub _process_pdu_scope
    return $this->{_scoped} = TRUE;
 }
 
-sub _process_pdu_sequence
-{
+sub _process_pdu_sequence {
    my ($this) = @_;
 
    # PDUs::=CHOICE
@@ -805,8 +763,7 @@ sub _process_pdu_sequence
    return TRUE;
 }
 
-sub _process_var_bind_list
-{
+sub _process_var_bind_list {
    my ($this) = @_;
 
    my $value;
@@ -875,8 +832,10 @@ sub _process_var_bind_list
    return $this->{_var_bind_list};
 }
 
-{
-   my @error_status = qw(
+sub _error_status_itoa {
+   return '??' if (@_ != 1);
+
+   state $error_status = [qw(
       noError
       tooBig
       noSuchName
@@ -896,22 +855,19 @@ sub _process_var_bind_list
       authorizationError
       notWritable
       inconsistentName
-   );
-
-   sub _error_status_itoa
-   {
-      return '??' if (@_ != 1);
-
-      if (($_[0] > $#error_status) || ($_[0] < 0)) {
-         return sprintf '??(%d)', $_[0];
-      }
-
-      return sprintf '%s(%d)', $error_status[$_[0]], $_[0];
+   )];
+   
+   if (($_[0] > scalar @$error_status) || ($_[0] < 0)) {
+      return sprintf '??(%d)', $_[0];
    }
+
+   return sprintf '%s(%d)', $error_status->[$_[0]], $_[0];
 }
 
-{
-   my %report_oids = (
+sub _report_pdu_error {
+   my ($this) = @_;
+
+   state $report_oids = {
       '1.3.6.1.6.3.11.2.1.1' => 'snmpUnknownSecurityModels',
       '1.3.6.1.6.3.11.2.1.2' => 'snmpInvalidMsgs',
       '1.3.6.1.6.3.11.2.1.3' => 'snmpUnknownPDUHandlers',
@@ -923,46 +879,40 @@ sub _process_var_bind_list
       '1.3.6.1.6.3.15.1.1.4' => 'usmStatsUnknownEngineIDs',
       '1.3.6.1.6.3.15.1.1.5' => 'usmStatsWrongDigests',
       '1.3.6.1.6.3.15.1.1.6' => 'usmStatsDecryptionErrors',
-   );
+   };
 
-   sub _report_pdu_error
-   {
-      my ($this) = @_;
+   # Remove the leading dot (if present) and replace the dotted notation
+   # of the OBJECT IDENTIFIER with the text ObjectName based upon an
+   # expected list of report OBJECT IDENTIFIERs.
 
-      # Remove the leading dot (if present) and replace the dotted notation
-      # of the OBJECT IDENTIFIER with the text ObjectName based upon an
-      # expected list of report OBJECT IDENTIFIERs.
+   my %var_bind_list;
 
-      my %var_bind_list;
-
-      for my $oid (@{$this->{_var_bind_names}}) {
-         my $text = $oid;
-         $text =~ s/^\.//;
-         for (keys %report_oids) {
-            if ($text =~ s/\Q$_/$report_oids{$_}/) {
-               last;
-            }
+   for my $oid (@{$this->{_var_bind_names}}) {
+      my $text = $oid;
+      $text =~ s/^\.//;
+      for (keys %$report_oids) {
+         if ($text =~ s/\Q$_/$report_oids->{$_}/) {
+            last;
          }
-         $var_bind_list{$text} = $this->{_var_bind_list}->{$oid};
       }
+      $var_bind_list{$text} = $this->{_var_bind_list}->{$oid};
+   }
 
-      my $count = keys %var_bind_list;
+   my $count = keys %var_bind_list;
 
-      if ($count == 1) {
-         # Return the OBJECT IDENTIFIER and value.
-         my $text = (keys %var_bind_list)[0];
-         return $this->_error(
-            'Received %s Report-PDU with value %s', $text, $var_bind_list{$text}
-         );
-      } elsif ($count > 1) {
-         # Return a list of OBJECT IDENTIFIERs.
-         return $this->_error(
-            'Received Report-PDU [%s]', join ', ', keys %var_bind_list
-         );
-      } else {
-         return $this->_error('Received empty Report-PDU');
-      }
-
+   if ($count == 1) {
+      # Return the OBJECT IDENTIFIER and value.
+      my $text = (keys %var_bind_list)[0];
+      return $this->_error(
+         'Received %s Report-PDU with value %s', $text, $var_bind_list{$text}
+      );
+   } elsif ($count > 1) {
+      # Return a list of OBJECT IDENTIFIERs.
+      return $this->_error(
+         'Received Report-PDU [%s]', join ', ', keys %var_bind_list
+      );
+   } else {
+      return $this->_error('Received empty Report-PDU');
    }
 }
 

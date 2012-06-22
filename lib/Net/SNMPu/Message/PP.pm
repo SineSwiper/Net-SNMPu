@@ -2,6 +2,12 @@ package Net::SNMPu::Message::PP;
 
 # ABSTRACT: PurePerl versions of the subs defined in Net::SNMPu::Message::XS
 
+use sanity;
+
+# Sigh, the constants will come after module compiling, so I have to be explicit
+# with the Perl parser with stuff like &TRUE, else I get Bareword strict errors.
+# (Turn off strict and Perl is just going to act like it's a string.)
+
 #
 # Buffer manipulation methods
 #
@@ -20,29 +26,29 @@ sub process {
 #  my ($this, $expected, $found) = @_;
 
    state $process_methods = {
-      INTEGER           => \&_process_integer,
-      OCTET_STRING      => \&_process_octet_string,
-      NULL              => \&_process_null,
-      OBJECT_IDENTIFIER => \&_process_object_identifier,
-      SEQUENCE          => \&_process_sequence,
-      IPADDRESS         => \&_process_ipaddress,
-      COUNTER           => \&_process_counter,
-      GAUGE             => \&_process_gauge,
-      TIMETICKS         => \&_process_timeticks,
-      OPAQUE            => \&_process_opaque,
-      COUNTER64         => \&_process_counter64,
-      NOSUCHOBJECT      => \&_process_nosuchobject,
-      NOSUCHINSTANCE    => \&_process_nosuchinstance,
-      ENDOFMIBVIEW      => \&_process_endofmibview,
-      GET_REQUEST       => \&_process_get_request,
-      GET_NEXT_REQUEST  => \&_process_get_next_request,
-      GET_RESPONSE      => \&_process_get_response,
-      SET_REQUEST       => \&_process_set_request,
-      TRAP              => \&_process_trap,
-      GET_BULK_REQUEST  => \&_process_get_bulk_request,
-      INFORM_REQUEST    => \&_process_inform_request,
-      SNMPV2_TRAP       => \&_process_v2_trap,
-      REPORT            => \&_process_report,
+      INTEGER()           => \&_process_integer,
+      OCTET_STRING()      => \&_process_octet_string,
+      NULL()              => \&_process_null,
+      OBJECT_IDENTIFIER() => \&_process_object_identifier,
+      SEQUENCE()          => \&_process_sequence,
+      IPADDRESS()         => \&_process_ipaddress,
+      COUNTER()           => \&_process_counter,
+      GAUGE()             => \&_process_gauge,
+      TIMETICKS()         => \&_process_timeticks,
+      OPAQUE()            => \&_process_opaque,
+      COUNTER64()         => \&_process_counter64,
+      NOSUCHOBJECT()      => \&_process_nosuchobject,
+      NOSUCHINSTANCE()    => \&_process_nosuchinstance,
+      ENDOFMIBVIEW()      => \&_process_endofmibview,
+      GET_REQUEST()       => \&_process_get_request,
+      GET_NEXT_REQUEST()  => \&_process_get_next_request,
+      GET_RESPONSE()      => \&_process_get_response,
+      SET_REQUEST()       => \&_process_set_request,
+      TRAP()              => \&_process_trap,
+      GET_BULK_REQUEST()  => \&_process_get_bulk_request,
+      INFORM_REQUEST()    => \&_process_inform_request,
+      SNMPV2_TRAP()       => \&_process_v2_trap,
+      REPORT()            => \&_process_report,
    };
 
    # XXX: If present, $found is updated as a side effect.
@@ -78,8 +84,8 @@ sub process {
 sub oid_base_match {
    my ($this, $base, $oid) = @_;
 
-   defined $base || return FALSE;
-   defined $oid  || return FALSE;
+   defined $oid  || return &FALSE;
+   defined $base || return &FALSE;
 
    $base =~ s/^\.//o;
    $oid  =~ s/^\.//o;
@@ -87,7 +93,7 @@ sub oid_base_match {
    $base = pack 'N*', split m/\./, $base;
    $oid  = pack 'N*', split m/\./, $oid;
 
-   return (substr($oid, 0, length $base) eq $base) ? TRUE : FALSE;
+   return (substr($oid, 0, length $base) eq $base) ? &TRUE : &FALSE;
 }
 
 sub oid_lex_cmp {
@@ -176,7 +182,7 @@ sub _process_integer32 {
    return $this->_error() if !defined(my $bytes = $this->_buffer_get($length));
 
    my @bytes = unpack 'C*', $bytes;
-   my $negative = FALSE;
+   my $negative = &FALSE;
    my $int32 = 0;
 
    # Validate the length of the Integer32
@@ -189,14 +195,14 @@ sub _process_integer32 {
    # If the first bit is set, the Integer32 is negative
    if ($bytes[0] & 0x80) {
       $int32 = -1;
-      $negative = TRUE;
+      $negative = &TRUE;
    }
 
    # Build the Integer32
    map { $int32 = (($int32 << 8) | $_) } @bytes;
 
    if ($negative) {
-      if (($type == INTEGER) || (!($this->{_translate} & TRANSLATE_UNSIGNED))) {
+      if (($type == &INTEGER) || (!($this->{_translate} & &TRANSLATE_UNSIGNED))) {
          return unpack 'l', pack 'l', $int32;
       } else {
          DEBUG_INFO('translating negative %s value', asn1_itoa($type));
@@ -217,7 +223,7 @@ sub _process_octet_string {
    return $this->_error() if !defined(my $s = $this->_buffer_get($length));
 
    # Set the translation mask
-   my $mask = ($type == OPAQUE) ? TRANSLATE_OPAQUE : TRANSLATE_OCTET_STRING;
+   my $mask = ($type == &OPAQUE) ? &TRANSLATE_OPAQUE : &TRANSLATE_OCTET_STRING;
 
    #
    # Translate based on the definition of a DisplayString in RFC 2579.
@@ -355,8 +361,8 @@ sub _process_gauge {
 sub _process_timeticks {
    my ($this) = @_;
 
-   if (defined(my $ticks = $this->_process_integer32(TIMETICKS))) {
-      if ($this->{_translate} & TRANSLATE_TIMETICKS) {
+   if (defined(my $ticks = $this->_process_integer32(&TIMETICKS))) {
+      if ($this->{_translate} & &TRANSLATE_TIMETICKS) {
          DEBUG_INFO('translating %u TimeTicks to time', $ticks);
          return asn1_ticks_to_time($ticks);
       } else {
@@ -375,7 +381,7 @@ sub _process_counter64 {
    my ($this, $type) = @_;
 
    # Verify the SNMP version
-   if ($this->{_version} == SNMP_VERSION_1) {
+   if ($this->{_version} == &SNMP_VERSION_1) {
       return $this->_error('The Counter64 type is not supported in SNMPv1');
    }
 
@@ -391,7 +397,7 @@ sub _process_counter64 {
    return $this->_error() if !defined(my $bytes = $this->_buffer_get($length));
 
    my @bytes = unpack 'C*', $bytes;
-   my $negative = FALSE;
+   my $negative = &FALSE;
 
    # Validate the length of the Counter64
    if (($length > 9) || (($length > 8) && ($bytes[0] != 0x00))) {
@@ -403,7 +409,7 @@ sub _process_counter64 {
    # If the first bit is set, the integer is negative
    if ($bytes[0] & 0x80) {
       $bytes[0] ^= 0xff;
-      $negative = TRUE;
+      $negative = &TRUE;
    }
 
    # Build the Counter64
@@ -419,7 +425,7 @@ sub _process_counter64 {
 
    if ($negative) {
       $int64 = Math::BigInt->new('-1') - $int64;
-      if ($this->{_translate} & TRANSLATE_UNSIGNED) {
+      if ($this->{_translate} & &TRANSLATE_UNSIGNED) {
          DEBUG_INFO('translating negative Counter64 value');
          $int64 += Math::BigInt->new('18446744073709551616');
       }

@@ -5,50 +5,10 @@ package Net::SNMPu::Message;
 use sanity;
 use bytes;
 
-use Math::BigInt();
+use Math::BigInt ();
+use Module::Implementation ();
 
 our $XS = 0;
-
-BEGIN {
-   my $loader = Module::Implementation::build_loader_sub(
-      implementations => [ $ENV{PERL_NETSNMPU_MESSAGE_PP} ? ('PP') : qw(XS PP) ],
-      symbols         => [
-         qw(index process oid_base_match oid_lex_cmp oid_lex_sort),
-         (map { "_process_$_" } qw(length integer32 octet_string object_identifier sequence ipaddress counter gauge timeticks opaque counter64)),
-         qw(_buffer_append _buffer_get),
-      ],
-   );
- 
-   $loader->();
-}
-
-# Set types for the XS version
-if (Module::Implementation::implementation_for(__PACKAGE__) eq 'XS') {
-   $XS = 1;
-   __PACKAGE__::XS::set_type INTEGER          , \&_process_integer32;
-   __PACKAGE__::XS::set_type OCTET_STRING     , \&_process_octet_string;
-   __PACKAGE__::XS::set_type NULL             , \&_process_null;
-   __PACKAGE__::XS::set_type OBJECT_IDENTIFIER, \&_process_object_identifier;
-   __PACKAGE__::XS::set_type SEQUENCE         , \&_process_sequence;
-   __PACKAGE__::XS::set_type IPADDRESS        , \&_process_ipaddress;
-   __PACKAGE__::XS::set_type COUNTER          , \&_process_counter;
-   __PACKAGE__::XS::set_type GAUGE            , \&_process_gauge;
-   __PACKAGE__::XS::set_type TIMETICKS        , \&_process_timeticks;
-   __PACKAGE__::XS::set_type OPAQUE           , \&_process_opaque;
-   __PACKAGE__::XS::set_type COUNTER64        , \&_process_counter64;
-   __PACKAGE__::XS::set_type NOSUCHOBJECT     , \&_process_nosuchobject;
-   __PACKAGE__::XS::set_type NOSUCHINSTANCE   , \&_process_nosuchinstance;
-   __PACKAGE__::XS::set_type ENDOFMIBVIEW     , \&_process_endofmibview;
-   __PACKAGE__::XS::set_type GET_REQUEST      , \&_process_get_request;
-   __PACKAGE__::XS::set_type GET_NEXT_REQUEST , \&_process_get_next_request;
-   __PACKAGE__::XS::set_type GET_RESPONSE     , \&_process_get_response;
-   __PACKAGE__::XS::set_type SET_REQUEST      , \&_process_set_request;
-   __PACKAGE__::XS::set_type TRAP             , \&_process_trap;
-   __PACKAGE__::XS::set_type GET_BULK_REQUEST , \&_process_get_bulk_request;
-   __PACKAGE__::XS::set_type INFORM_REQUEST   , \&_process_inform_request;
-   __PACKAGE__::XS::set_type SNMPV2_TRAP      , \&_process_v2_trap;
-   __PACKAGE__::XS::set_type REPORT           , \&_process_report;
-}
 
 ### TODO: The rest of this stuff is only found as a PP version. ###
 
@@ -187,6 +147,68 @@ use constant {
    FALSE                    => 0x00,
 };
 
+# The ordering on this one has to be just right; after the constants, but before
+# any of that set_type nonsense...
+BEGIN {
+   my $loader = Module::Implementation::build_loader_sub(
+      implementations => [ $ENV{PERL_NETSNMPU_MESSAGE_PP} ? ('PP') : qw(XS PP) ],
+      symbols         => [
+         qw(index process oid_base_match oid_lex_cmp oid_lex_sort),
+         (map { "_process_$_" } qw(length integer32 octet_string object_identifier sequence ipaddress counter gauge timeticks opaque counter64)),
+         qw(_buffer_append _buffer_get),
+      ],
+   );
+ 
+   $loader->();
+}
+   
+# Set types for the XS version
+if (Module::Implementation::implementation_for(__PACKAGE__) eq 'XS') {
+   $XS = 1;
+   __PACKAGE__::XS::set_type(INTEGER          , \&_process_integer32        );
+   __PACKAGE__::XS::set_type(OCTET_STRING     , \&_process_octet_string     );
+   __PACKAGE__::XS::set_type(NULL             , \&_process_null             );
+   __PACKAGE__::XS::set_type(OBJECT_IDENTIFIER, \&_process_object_identifier);
+   __PACKAGE__::XS::set_type(SEQUENCE         , \&_process_sequence         );
+   __PACKAGE__::XS::set_type(IPADDRESS        , \&_process_ipaddress        );
+   __PACKAGE__::XS::set_type(COUNTER          , \&_process_counter          );
+   __PACKAGE__::XS::set_type(GAUGE            , \&_process_gauge            );
+   __PACKAGE__::XS::set_type(TIMETICKS        , \&_process_timeticks        );
+   __PACKAGE__::XS::set_type(OPAQUE           , \&_process_opaque           );
+   __PACKAGE__::XS::set_type(COUNTER64        , \&_process_counter64        );
+   __PACKAGE__::XS::set_type(NOSUCHOBJECT     , \&_process_nosuchobject     );
+   __PACKAGE__::XS::set_type(NOSUCHINSTANCE   , \&_process_nosuchinstance   );
+   __PACKAGE__::XS::set_type(ENDOFMIBVIEW     , \&_process_endofmibview     );
+   __PACKAGE__::XS::set_type(GET_REQUEST      , \&_process_get_request      );
+   __PACKAGE__::XS::set_type(GET_NEXT_REQUEST , \&_process_get_next_request );
+   __PACKAGE__::XS::set_type(GET_RESPONSE     , \&_process_get_response     );
+   __PACKAGE__::XS::set_type(SET_REQUEST      , \&_process_set_request      );
+   __PACKAGE__::XS::set_type(TRAP             , \&_process_trap             );
+   __PACKAGE__::XS::set_type(GET_BULK_REQUEST , \&_process_get_bulk_request );
+   __PACKAGE__::XS::set_type(INFORM_REQUEST   , \&_process_inform_request   );
+   __PACKAGE__::XS::set_type(SNMPV2_TRAP      , \&_process_v2_trap          );
+   __PACKAGE__::XS::set_type(REPORT           , \&_process_report           );
+}
+# The PP version still needs access to some of the constants
+else {
+   # (File under "private but useful")
+   Module::Implementation::_copy_symbols(__PACKAGE__, __PACKAGE__.'::PP', [qw(
+      INTEGER INTEGER32 OCTET_STRING NULL OBJECT_IDENTIFIER SEQUENCE
+      IPADDRESS COUNTER COUNTER32 GAUGE GAUGE32 UNSIGNED32 TIMETICKS OPAQUE COUNTER64
+
+      NOSUCHOBJECT NOSUCHINSTANCE ENDOFMIBVIEW
+
+      GET_REQUEST GET_NEXT_REQUEST GET_RESPONSE SET_REQUEST TRAP GET_BULK_REQUEST INFORM_REQUEST SNMPV2_TRAP REPORT
+
+      SNMP_VERSION_1 SNMP_VERSION_2C SNMP_VERSION_3
+      
+      TRANSLATE_NONE TRANSLATE_OCTET_STRING TRANSLATE_NULL TRANSLATE_TIMETICKS TRANSLATE_OPAQUE
+      TRANSLATE_NOSUCHOBJECT TRANSLATE_NOSUCHINSTANCE TRANSLATE_ENDOFMIBVIEW TRANSLATE_UNSIGNED TRANSLATE_ALL
+
+      TRUE FALSE
+   )]);
+}
+
 ## Package variables
 
 our $DEBUG = FALSE;                    # Debug flag
@@ -253,29 +275,29 @@ sub prepare {
 #     my ($this, $type, $value) = @_;
 
    state $prepare_methods = {
-      INTEGER           => \&_prepare_integer,
-      OCTET_STRING      => \&_prepare_octet_string,
-      NULL              => \&_prepare_null,
-      OBJECT_IDENTIFIER => \&_prepare_object_identifier,
-      SEQUENCE          => \&_prepare_sequence,
-      IPADDRESS         => \&_prepare_ipaddress,
-      COUNTER           => \&_prepare_counter,
-      GAUGE             => \&_prepare_gauge,
-      TIMETICKS         => \&_prepare_timeticks,
-      OPAQUE            => \&_prepare_opaque,
-      COUNTER64         => \&_prepare_counter64,
-      NOSUCHOBJECT      => \&_prepare_nosuchobject,
-      NOSUCHINSTANCE    => \&_prepare_nosuchinstance,
-      ENDOFMIBVIEW      => \&_prepare_endofmibview,
-      GET_REQUEST       => \&_prepare_get_request,
-      GET_NEXT_REQUEST  => \&_prepare_get_next_request,
-      GET_RESPONSE      => \&_prepare_get_response,
-      SET_REQUEST       => \&_prepare_set_request,
-      TRAP              => \&_prepare_trap,
-      GET_BULK_REQUEST  => \&_prepare_get_bulk_request,
-      INFORM_REQUEST    => \&_prepare_inform_request,
-      SNMPV2_TRAP       => \&_prepare_v2_trap,
-      REPORT            => \&_prepare_report,
+      INTEGER()           => \&_prepare_integer,
+      OCTET_STRING()      => \&_prepare_octet_string,
+      NULL()              => \&_prepare_null,
+      OBJECT_IDENTIFIER() => \&_prepare_object_identifier,
+      SEQUENCE()          => \&_prepare_sequence,
+      IPADDRESS()         => \&_prepare_ipaddress,
+      COUNTER()           => \&_prepare_counter,
+      GAUGE()             => \&_prepare_gauge,
+      TIMETICKS()         => \&_prepare_timeticks,
+      OPAQUE()            => \&_prepare_opaque,
+      COUNTER64()         => \&_prepare_counter64,
+      NOSUCHOBJECT()      => \&_prepare_nosuchobject,
+      NOSUCHINSTANCE()    => \&_prepare_nosuchinstance,
+      ENDOFMIBVIEW()      => \&_prepare_endofmibview,
+      GET_REQUEST()       => \&_prepare_get_request,
+      GET_NEXT_REQUEST()  => \&_prepare_get_next_request,
+      GET_RESPONSE()      => \&_prepare_get_response,
+      SET_REQUEST()       => \&_prepare_set_request,
+      TRAP()              => \&_prepare_trap,
+      GET_BULK_REQUEST()  => \&_prepare_get_bulk_request,
+      INFORM_REQUEST()    => \&_prepare_inform_request,
+      SNMPV2_TRAP()       => \&_prepare_v2_trap,
+      REPORT()            => \&_prepare_report,
    };
 
    return $_[0]->_error() if defined $_[0]->{_error};
@@ -1370,8 +1392,7 @@ sub _process_trap {
    goto &_process_pdu_type;
 }
 
-sub _process_get_bulk_request
-{
+sub _process_get_bulk_request {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1381,8 +1402,7 @@ sub _process_get_bulk_request
    goto &_process_pdu_type;
 }
 
-sub _process_inform_request
-{
+sub _process_inform_request {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1392,8 +1412,7 @@ sub _process_inform_request
    goto &_process_pdu_type;
 }
 
-sub _process_v2_trap
-{
+sub _process_v2_trap {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1403,8 +1422,7 @@ sub _process_v2_trap
    goto &_process_pdu_type;
 }
 
-sub _process_report
-{
+sub _process_report {
    my ($this) = @_;
 
    if ($this->{_version} == SNMP_VERSION_1) {
@@ -1414,8 +1432,7 @@ sub _process_report
    goto &_process_pdu_type;
 }
 
-sub _prepare_var_bind_list
-{
+sub _prepare_var_bind_list {
    my ($this, $var_bind) = @_;
 
    # The passed array is expected to consist of groups of four values

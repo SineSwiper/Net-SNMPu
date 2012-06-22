@@ -1,13 +1,13 @@
-#!perl -T
-use 5.006;
-use strict;
-use warnings FATAL => 'all';
+use sanity;
 use Test::More;
+use version;
 
 plan tests => 1;
 
 BEGIN {
-    use_ok( 'sanity' ) || print "Bail out!\n";
+   use_ok( 'Net::SNMPu' ) || print "Bail out!\n";
 }
 
-diag( "Testing sanity $sanity::VERSION, Perl $], $^X" );
+diag( 
+   sprintf("Testing %s %s, Perl %s (%s)", 'Net::SNMPu', (map { version->parse($_)->normal } ($Net::SNMPu::VERSION, $])), $^X)
+);

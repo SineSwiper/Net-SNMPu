@@ -26,44 +26,36 @@ use constant {
    _HOSTNAME => 5,  # Destination hostname
 };
 
-BEGIN
-{
+BEGIN {
    # Use a higher resolution of time() and possibly a monotonically
    # increasing time value if the Time::HiRes module is available.
 
    if (eval 'require Time::HiRes') {
       Time::HiRes->import('time');
       no warnings;
-      if (eval 'Time::HiRes::clock_gettime(Time::HiRes::CLOCK_MONOTONIC())' > 0)
-      {
-         *time = sub () {
-            Time::HiRes::clock_gettime(Time::HiRes::CLOCK_MONOTONIC());
-         };
-      }
+      *time = sub () {
+         Time::HiRes::clock_gettime(Time::HiRes::CLOCK_MONOTONIC());
+      } if (eval 'Time::HiRes::clock_gettime(Time::HiRes::CLOCK_MONOTONIC())' > 0);
    }
 
    # Validate the creation of the Message Processing object.
-
-   if (!defined($MESSAGE_PROCESSING = Net::SNMPu::MessageProcessing->instance()))
-   {
-      die 'FATAL: Failed to create Message Processing instance';
-   }
+   die 'FATAL: Failed to create Message Processing instance'
+      unless defined($MESSAGE_PROCESSING = Net::SNMPu::MessageProcessing->instance);
 }
 
-INIT
-{
-   %SUBREFS = map { *{ $Net::SNMPu::Dispatcher::{$_} }{CODE} => '&'.$_ } (keys %Net::SNMPu::Dispatcher::);
+INIT {
+   %SUBREFS = map  { *{ $Net::SNMPu::Dispatcher::{$_} }{CODE} => '&'.$_ }
+              grep { ref $Net::SNMPu::Dispatcher::{$_} eq 'GLOB' }
+              (keys %Net::SNMPu::Dispatcher::);
 }
 
 # [public methods] -----------------------------------------------------------
 
-sub instance
-{
+sub instance {
    return $INSTANCE ||= Net::SNMPu::Dispatcher->_new();
 }
 
-sub loop
-{
+sub loop {
    my ($this) = @_;
 
    return TRUE if ($this->{_active});
@@ -78,8 +70,7 @@ sub loop
    return $this->{_active} = FALSE;
 }
 
-sub one_event
-{
+sub one_event {
    my ($this) = @_;
 
    return TRUE if ($this->{_active});
@@ -93,18 +84,15 @@ sub one_event
    return (defined $this->{_event_queue_h} || keys %{$this->{_descriptors}});
 }
 
-sub activate
-{
+sub activate {
    goto &loop;
 }
 
-sub listen
-{
+sub listen {
    goto &loop;
 }
 
-sub send_pdu
-{
+sub send_pdu {
    my ($this, $pdu, $delay) = @_;
 
    # Clear any previous errors
@@ -129,34 +117,29 @@ sub send_pdu
    return TRUE;
 }
 
-sub send_pdu_priority
-{
+sub send_pdu_priority {
    my ($this, $pdu) = @_;
 
    return $this->send_pdu($pdu, -1);
 }
 
-sub msg_handle_alloc
-{
+sub msg_handle_alloc {
    return $MESSAGE_PROCESSING->msg_handle_alloc();
 }
 
-sub schedule
-{
+sub schedule {
    my ($this, $time, $hostname, $callback) = @_;
 
    return $this->_event_create($time, $hostname, $this->_callback_create($callback));
 }
 
-sub cancel
-{
+sub cancel {
    my ($this, $event) = @_;
 
    return $this->_event_delete($event);
 }
 
-sub register
-{
+sub register {
    my ($this, $transport, $hostname, $callback) = @_;
 
    # Transport Domain, file descriptor, and destination hostname must be valid.
@@ -213,8 +196,7 @@ sub register
    return $transport;
 }
 
-sub deregister
-{
+sub deregister {
    my ($this, $transport, $hostname) = @_;
 
    # Transport Domain, file descriptor, and destination hostname must be valid.
@@ -264,20 +246,17 @@ sub deregister
    return $transport;
 }
 
-sub error
-{
+sub error {
    return $_[0]->{_error} || q{};
 }
 
-sub debug
-{
+sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
 # [private methods] ----------------------------------------------------------
 
-sub _new
-{
+sub _new {
    my ($class) = @_;
 
    # The constructor is private since we only want one
@@ -294,8 +273,7 @@ sub _new
    }, $class;
 }
 
-sub _send_pdu
-{
+sub _send_pdu {
    my ($this, $pdu, $retries) = @_;
 
    # Pass the PDU to Message Processing so that it can
@@ -346,8 +324,7 @@ sub _send_pdu
    return TRUE;
 }
 
-sub _transport_timeout
-{
+sub _transport_timeout {
    my ($this, $pdu, $retries, $handle) = @_;
 
    # Stop waiting for responses.
@@ -376,8 +353,7 @@ sub _transport_timeout
    }
 }
 
-sub _transport_response_received
-{
+sub _transport_response_received {
    my ($this, $transport) = @_;
 
    # Clear any previous errors
@@ -430,14 +406,12 @@ sub _transport_response_received
    return $msg->process_response_pdu();
 }
 
-sub _event_info
-{
+sub _event_info {
    my (undef, $event) = @_;
    return sprintf('[%s ==> %s for %s]', $event, $SUBREFS{$event->[_CALLBACK][0]}, $event->[_HOSTNAME]);
 }
 
-sub _event_create
-{
+sub _event_create {
    my ($this, $time, $hostname, $callback) = @_;
 
    # Create a new event anonymous array and add it to the queue.
@@ -458,8 +432,7 @@ sub _event_create
    );
 }
 
-sub _event_insert
-{
+sub _event_insert {
    my ($this, $event) = @_;
    my $event_info = $this->_event_info($event);
 
@@ -530,8 +503,7 @@ sub _event_insert
    return $event;
 }
 
-sub _event_delete
-{
+sub _event_delete {
    my ($this, $event) = @_;
 
    my $info = q{};
@@ -568,8 +540,7 @@ sub _event_delete
    return TRUE;
 }
 
-sub _event_init
-{
+sub _event_init {
    my ($this, $event) = @_;
 
    DEBUG_INFO('initializing event %s', $this->_event_info($event));
@@ -592,8 +563,7 @@ sub _event_init
    return TRUE;
 }
 
-sub _event_handle
-{
+sub _event_handle {
    my ($this, $timeout) = @_;
    my ($time, $event) = (time(), $this->{_event_queue_h});
 
@@ -688,8 +658,7 @@ sub _event_handle
    return TRUE;
 }
 
-sub _callback_create
-{
+sub _callback_create {
    my ($this, $callback) = @_;
 
    # Callbacks can be passed in two different ways.  If the callback
@@ -707,8 +676,7 @@ sub _callback_create
    }
 }
 
-sub _callback_execute
-{
+sub _callback_execute {
    my ($this, @argv) = @_;
 
    # The callback is invoked passing a reference to this object
@@ -723,8 +691,7 @@ sub _callback_execute
    return ($@) ? $this->_error($@) : TRUE;
 }
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    if (!defined $this->{_error}) {
@@ -738,13 +705,11 @@ sub _error
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    return $_[0]->{_error} = undef;
 }
 
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return $DEBUG if (!$DEBUG);
 
    return printf

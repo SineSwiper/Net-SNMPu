@@ -29,13 +29,11 @@ BEGIN {
 
 # [public methods] -----------------------------------------------------------
 
-sub instance
-{
+sub instance {
    return $INSTANCE ||= Net::SNMPu::MessageProcessing->_new();
 }
 
-sub prepare_outgoing_msg
-{
+sub prepare_outgoing_msg {
    my ($this, $pdu) = @_;
 
    # Clear any previous errors
@@ -108,8 +106,7 @@ sub prepare_outgoing_msg
    return $msg;
 }
 
-sub prepare_data_elements
-{
+sub prepare_data_elements {
    my ($this, $msg) = @_;
 
    # Clear any previous errors
@@ -285,8 +282,7 @@ sub prepare_data_elements
    return $msg;
 }
 
-sub msg_handle_alloc
-{
+sub msg_handle_alloc {
    my ($this) = @_;
 
    # Limit message handles by RFC 3412 - msgID::=INTEGER (0..2147483647)
@@ -302,8 +298,7 @@ sub msg_handle_alloc
    return $handle;
 }
 
-sub msg_handle_delete
-{
+sub msg_handle_delete {
    my ($this, $handle) = @_;
 
    # Clear any previous errors
@@ -318,20 +313,17 @@ sub msg_handle_delete
    return delete $this->[_HANDLES]->{$handle};
 }
 
-sub error
-{
+sub error {
    return $_[0]->[_ERROR] || q{};
 }
 
-sub debug
-{
+sub debug {
    return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
 }
 
 # [private methods] ----------------------------------------------------------
 
-sub _new
-{
+sub _new {
    my ($class) = @_;
 
    # The constructor is private since we only want one MessageProcessing
@@ -341,8 +333,7 @@ sub _new
    return bless [ undef, { 0, undef } ], $class;
 }
 
-sub _prepare_global_data
-{
+sub _prepare_global_data {
    my ($this, $pdu, $msg) = @_;
 
    # msgSecurityModel::=INTEGER
@@ -400,8 +391,7 @@ sub _prepare_global_data
    return TRUE;
 }
 
-sub _process_global_data
-{
+sub _process_global_data {
    my ($this, $msg) = @_;
 
    # msgGlobalData::=SEQUENCE
@@ -465,8 +455,7 @@ sub _process_global_data
    return TRUE;
 }
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    if (!defined $this->[_ERROR]) {
@@ -480,13 +469,11 @@ sub _error
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    return $_[0]->[_ERROR] = undef;
 }
 
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return $DEBUG if (!$DEBUG);
 
    return printf

@@ -1,47 +1,11 @@
-#! /bin/env perl
+#!perl
 
-# ============================================================================
-
-# $Id: snmpkey.PL,v 6.0 2009/09/09 15:07:48 dtown Rel $
-
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
-
-use strict;
-use warnings;
-
-use Config;
-
-my $file = shift || 'snmpkey';
-
-my $fh;
-
-open($fh, q{>}, "$file") || die "Failed to open file '$file' [$!]";
-
-print {$fh} "$Config{startperl}\n";
-
-print {$fh} <<'AS-IS';
-
-# ============================================================================
-
-# $Id: snmpkey.PL,v 6.0 2009/09/09 15:07:48 dtown Rel $
-
-# Copyright (c) 2001-2009 David M. Town <dtown@cpan.org>
-# All rights reserved.
-
-# This program is free software; you may redistribute it and/or modify it
-# under the same terms as the Perl 5 programming language system itself.
-
-# ============================================================================
+# PODNAME: snmpkey
+# ABSTRACT: Create SNMPv3 security keys for the Net::SNMPu module
 
 =head1 NAME
 
-snmpkey - Create SNMPv3 security keys for the Net::SNMP module
+snmpkey - Create SNMPv3 security keys for the Net::SNMPu module
 
 =head1 USAGE
 
@@ -71,7 +35,7 @@ The C<snmpkey> utility requires at least three command line arguments.  The
 first argument defines which hash algorithm to use when creating the authKey.
 Either HMAC-MD5-96 or HMAC-SHA-96 can be specified with the string 'md5' or 
 'sha' respectively.  This choice must match the algorithm passed to the 
-B<-authprotocol> argument when creating the Net::SNMP object.  The second 
+B<-authprotocol> argument when creating the Net::SNMPu object.  The second 
 argument is the plain text password that is to be localized to create the 
 authKey.  The third required argument is the authoritativeEngineID of the 
 remote SNMP engine associated with the Net::SNMP argument B<-hostname>.  The 
@@ -85,7 +49,7 @@ User-based Security Model.  The Net::SNMP module supports CBC-3DES-EDE and
 CFB128-AES-128 as alternatives to the default protocol CBC-DES.  These
 protocols can be chosen by specifying the string '3des' or 'aes' respectively.
 This choice must match the protocol passed to the B<-privprotocol> argument 
-when creating the Net::SNMP object.  The last argument can be used to specify 
+when creating the Net::SNMPu object.  The last argument can be used to specify 
 the plain text password that is to be localized to create the privKey.  If 
 this argument is not specified, the authKey password is used.
 
@@ -102,16 +66,15 @@ the same terms as the Perl 5 programming language system itself.
 
 =head1 SEE ALSO
 
-L<Net::SNMP>
+L<Net::SNMPu>
 
 =cut
 
 # ============================================================================
 
-use strict;
-use warnings;
+use sanity;
 
-use Net::SNMPu::Security::USM 4.0;
+use Net::SNMPu::Security::USM;
 
 our $SCRIPT  = 'snmpkey';
 our $VERSION = v6.0.0;
@@ -142,14 +105,12 @@ exit 0;
 
 # [functions] ----------------------------------------------------------------
 
-sub abort
-{
+sub abort {
    printf "$SCRIPT: " . ((@_ > 1) ? shift(@_) : '%s') . ".\n", @_;
    exit 1;
 }
 
-sub usage
-{
+sub usage {
    printf "%s v%vd\n", $SCRIPT, $VERSION;
    print << "USAGE";
 Copyright (c) 2001-2009 David M. Town.  All rights reserved.
@@ -162,14 +123,3 @@ USAGE
 }
 
 # ============================================================================
-
-AS-IS
-
-close($fh) || die "Failed to close file '$file' [$!]";
-
-chmod(0755, $file) || die "Failed to set permissions for file '$file' [$!]";
-
-exit 0;
-
-# ============================================================================
-

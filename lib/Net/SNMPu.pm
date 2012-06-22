@@ -106,13 +106,6 @@ client has the CPU/RAM resources to process them.
 # ============================================================================
 
 use sanity;
-
-## Version of the Net::SNMPu module
-
-our $VERSION = v6.0.1;
-
-## Load our modules
-
 use Net::SNMPu::Dispatcher();
 use Net::SNMPu::PDU qw( :ALL !DEBUG_INFO );
 use Net::SNMPu::Security();
@@ -177,29 +170,17 @@ sub DEBUG_SECURITY    { 0x20 }  # Security
 
 ## Package variables
 
-our $DEBUG_MASK = DEBUG_NONE;   # Debug mask
-our $DEBUG      = 0;            # Debug mode for just Net::SNMPu
-
+our $DEBUG_MASK  = DEBUG_NONE;  # Debug mask
+our $DEBUG       = 0;           # Debug mode for just Net::SNMPu
 our $DISPATCHER;                # Dispatcher instance
-
-our $BLOCKING = 0;              # Count of blocking objects
-
+our $BLOCKING    = 0;           # Count of blocking objects
 our $NONBLOCKING = 0;           # Count of non-blocking objects
 
-BEGIN
-{
+BEGIN {
    # Validate the creation of the Dispatcher object.
 
    if (!defined ($DISPATCHER = Net::SNMPu::Dispatcher->instance())) {
       die 'FATAL: Failed to create Dispatcher instance';
-   }
-
-   # In older versions of Perl, the UNIVERSAL::VERSION() method does not
-   # handle version defined as v-strings gracefully.  We provide our
-   # own handling of versions to account for this.
-
-   if ($] < 5.009) {
-      *VERSION = \&require_version;
    }
 }
 
@@ -379,8 +360,7 @@ represents the "default" context.
 
 }
 
-sub open
-{
+sub open {
    my ($this) = @_;
 
    # Clear any previous errors
@@ -573,8 +553,7 @@ argument with the string '3des' or '3desede'.
 
 =cut
 
-sub session
-{
+sub session {
    my $class = shift;
 
    my ($this, $error) = $class->new(@_);
@@ -588,8 +567,7 @@ sub session
    return wantarray ? ($this, $error) : $this;
 }
 
-sub manager
-{
+sub manager {
    goto &session;
 }
 
@@ -603,8 +581,7 @@ receive SNMP messages.
 
 =cut
 
-sub close
-{
+sub close {
    my ($this) = @_;
 
    $this->_error_clear();
@@ -625,20 +602,17 @@ exported as the stand alone function C<snmp_dispatcher()> by default
 
 =cut
 
-sub snmp_dispatcher
-{
+sub snmp_dispatcher {
    return $DISPATCHER->loop();
 }
 
-sub snmp_event_loop
-{
+sub snmp_event_loop {
    require Carp;
    Carp::croak('snmp_event_loop() is obsolete, use snmp_dispatcher() instead');
    goto &snmp_dispatcher;
 }
 
-sub snmp_dispatch_once
-{
+sub snmp_dispatch_once {
    return $DISPATCHER->one_event();
 }
 
@@ -667,8 +641,7 @@ of the failure.
 
 =cut
 
-sub get_request
-{
+sub get_request {
    my $this = shift;
 
    $this->_error_clear();
@@ -720,8 +693,7 @@ of the failure.
 
 =cut
 
-sub get_next_request
-{
+sub get_next_request {
    my $this = shift;
 
    $this->_error_clear();
@@ -776,8 +748,7 @@ of the failure.
 
 =cut
 
-sub set_request
-{
+sub set_request {
    my $this = shift;
 
    $this->_error_clear();
@@ -881,8 +852,7 @@ SNMPv1.
 
 =cut
 
-sub trap
-{
+sub trap {
    my $this = shift;
 
    $this->_error_clear();
@@ -964,8 +934,7 @@ SNMPv2c or SNMPv3.
 
 =cut
 
-sub get_bulk_request
-{
+sub get_bulk_request {
    my $this = shift;
 
    $this->_error_clear();
@@ -1040,8 +1009,7 @@ SNMPv2c or SNMPv3.
 
 =cut
 
-sub inform_request
-{
+sub inform_request {
    my $this = shift;
 
    $this->_error_clear();
@@ -1115,8 +1083,7 @@ by the Net::SNMPu module.
 
 =cut
 
-sub snmpv2_trap
-{
+sub snmpv2_trap {
    my $this = shift;
 
    $this->_error_clear();
@@ -1180,8 +1147,7 @@ OBJECT IDENTIFIER is close to the root of the SNMP MIB tree.
 
 =cut
 
-sub get_table
-{
+sub get_table {
    my $this = shift;
 
    $this->_error_clear();
@@ -1333,8 +1299,7 @@ of the failure.
 
 =cut
 
-sub get_entries
-{
+sub get_entries {
    my $this = shift;
 
    $this->_error_clear();
@@ -1565,8 +1530,7 @@ be exported by request (see L<"EXPORTS">).
 
 =cut
 
-sub version
-{
+sub version {
    my ($this) = @_;
 
    return $this->_error('The SNMP version is not modifiable') if (@_ == 2);
@@ -1583,8 +1547,7 @@ An empty string is returned if no error has occurred.
 
 =cut
 
-sub error
-{
+sub error {
    return $_[0]->{_error} || q{};
 }
 
@@ -1599,8 +1562,7 @@ included as part of the returned string.
 
 =cut
 
-sub hostname
-{
+sub hostname {
    return $_[0]->{_hostname};
 }
 
@@ -1613,8 +1575,7 @@ last SNMP message received by the object.
 
 =cut
 
-sub error_status
-{
+sub error_status {
    return defined($_[0]->{_pdu}) ? $_[0]->{_pdu}->error_status() : 0;
 }
 
@@ -1627,8 +1588,7 @@ last SNMP message received by the object.
 
 =cut
 
-sub error_index
-{
+sub error_index {
    return defined($_[0]->{_pdu}) ? $_[0]->{_pdu}->error_index() : 0;
 }
 
@@ -1649,8 +1609,7 @@ undefined value is returned if there has been a failure.
 
 =cut
 
-sub var_bind_list
-{
+sub var_bind_list {
    return defined($_[0]->{_pdu}) ? $_[0]->{_pdu}->var_bind_list() : undef;
 }
 
@@ -1669,8 +1628,7 @@ a failure.
 
 =cut
 
-sub var_bind_names
-{
+sub var_bind_names {
    return defined($_[0]->{_pdu}) ? @{$_[0]->{_pdu}->var_bind_names()} : ();
 }
 
@@ -1689,8 +1647,7 @@ is returned if there has been a failure.
 
 =cut
 
-sub var_bind_types
-{
+sub var_bind_types {
    return defined($_[0]->{_pdu}) ? $_[0]->{_pdu}->var_bind_types() : undef;
 }
 
@@ -1710,8 +1667,7 @@ the cause.
 
 =cut
 
-sub timeout
-{
+sub timeout {
    my $this = shift;
 
    if (!defined $this->{_transport}) {
@@ -1740,8 +1696,7 @@ the cause.
 
 =cut
 
-sub retries
-{
+sub retries {
    my $this = shift;
 
    if (!defined $this->{_transport}) {
@@ -1777,8 +1732,7 @@ lower value.
 
 =cut
 
-sub max_msg_size
-{
+sub max_msg_size {
    my $this = shift;
 
    if (!defined $this->{_transport}) {
@@ -1792,8 +1746,7 @@ sub max_msg_size
    return $this->_error($this->{_transport}->error());
 }
 
-sub mtu
-{
+sub mtu {
    goto &max_msg_size;
 }
 
@@ -1830,8 +1783,7 @@ this behavior can be overridden by re-changing it on the callback sub.)
 
 =cut
 
-sub max_requests
-{
+sub max_requests {
    my $this = shift;
 
    if (!defined $this->{_transport}) {
@@ -1932,8 +1884,7 @@ the cause.
 
 =cut
 
-sub translate
-{
+sub translate {
    my ($this, $mask) = @_;
 
    if (@_ != 2) {
@@ -2037,8 +1988,7 @@ exported by request (see L<"EXPORTS">).
 
 =cut
 
-sub debug
-{
+sub debug {
    my (undef, $mask) = @_;
 
    if (@_ == 2) {
@@ -2057,28 +2007,23 @@ sub debug
    return $DEBUG_MASK;
 }
 
-sub snmp_debug
-{
+sub snmp_debug {
    return debug(undef, $_[0]);
 }
 
-sub pdu
-{
+sub pdu {
    return $_[0]->{_pdu};
 }
 
-sub nonblocking
-{
+sub nonblocking {
    return $_[0]->{_nonblocking};
 }
 
-sub security
-{
+sub security {
    return $_[0]->{_security};
 }
 
-sub transport
-{
+sub transport {
    return $_[0]->{_transport};
 }
 
@@ -2133,8 +2078,7 @@ the most basic type name will be returned.
 
 =cut
 
-sub snmp_type_ntop
-{
+sub snmp_type_ntop {
    goto &asn1_itoa;
 }
 
@@ -2150,13 +2094,11 @@ and seconds format according to the value of the TimeTicks argument.
 
 =cut
 
-sub ticks_to_time
-{
+sub ticks_to_time {
    goto &asn1_ticks_to_time;
 }
 
-sub DESTROY
-{
+sub DESTROY {
    my ($this) = @_;
 
    # We decrement the object type count when the object goes out of
@@ -2176,8 +2118,7 @@ sub DESTROY
 
 # [private methods] ----------------------------------------------------------
 
-sub _send_pdu
-{
+sub _send_pdu {
    my ($this) = @_;
 
    # Check to see if we are still in the process of discovering the
@@ -2201,8 +2142,7 @@ sub _send_pdu
    return ($this->{_nonblocking}) ? TRUE : $this->var_bind_list();
 }
 
-sub _create_pdu
-{
+sub _create_pdu {
    my ($this) = @_;
 
    # Create the new PDU
@@ -2537,8 +2477,7 @@ sub _perform_discovery {
    return ($this->{_error}) ? $this->_error() : TRUE;
 }
 
-sub _discovery_engine_id_cb
-{
+sub _discovery_engine_id_cb {
    my ($this) = @_;
 
    # "The response to this message will be a Report message containing 
@@ -2603,8 +2542,7 @@ sub _discovery_engine_id_cb
    return ($this->{_error}) ? $this->_error() : TRUE;
 }
 
-sub _discovery_synchronization_cb
-{
+sub _discovery_synchronization_cb {
    my ($this) = @_;
 
    # "The response... ...will be a Report message containing the up 
@@ -2634,8 +2572,7 @@ sub _discovery_synchronization_cb
    return $this->_discovery_failed();
 }
 
-sub _discovery_failed
-{
+sub _discovery_failed {
    my ($this) = @_;
 
    # The discovery process has failed, clear the current PDU and the
@@ -2652,8 +2589,7 @@ sub _discovery_failed
    return $this->_error();
 }
 
-sub _discovery_complete
-{
+sub _discovery_complete {
    my ($this) = @_;
 
    # Discovery is complete, send any pending messages.
@@ -2664,8 +2600,7 @@ sub _discovery_complete
    return ($this->{_error}) ? $this->_error() : TRUE;
 }
 
-sub _translate_mask
-{
+sub _translate_mask {
    my ($this, $enable, $mask) = @_;
 
    # Define the translate bitmask for the object based on the
@@ -2680,8 +2615,7 @@ sub _translate_mask
    return $this->{_translate};
 }
 
-sub _msg_size_max_reps
-{
+sub _msg_size_max_reps {
    my ($this) = @_;
 
    # Use the maxMsgSize of the object to produce a max-repetitions
@@ -2697,8 +2631,7 @@ sub _msg_size_max_reps
    return int $this->{_transport}->max_msg_size() * 0.017;
 }
 
-sub _get_table_cb
-{
+sub _get_table_cb {
    my ($this, $argv) = @_;
 
    # Use get-next-requests or get-bulk-requests until the response is
@@ -2772,8 +2705,7 @@ sub _get_table_cb
    return;
 }
 
-sub _get_entries_cb
-{
+sub _get_entries_cb {
    my ($this, $argv) = @_;
 
    # Get the current callback.
@@ -2995,8 +2927,7 @@ sub _get_entries_cb
    return;
 }
 
-sub _get_table_entries_request_next
-{
+sub _get_table_entries_request_next {
    my ($this, $argv, $callback, $vbl) = @_;
 
    # Copy the current PDU for use in error conditions.
@@ -3046,8 +2977,7 @@ sub _get_table_entries_request_next
    return;
 }
 
-sub _get_entries_exec_row_cb
-{
+sub _get_entries_exec_row_cb {
    my ($this, $argv, $index, $row) = @_;
 
    return if !defined $argv->{row_callback};
@@ -3071,8 +3001,7 @@ sub _get_entries_exec_row_cb
    return eval { $cb->(@argv); };
 }
 
-sub _error
-{
+sub _error {
    my $this = shift;
 
    # If the PDU callback is still defined when an error occurs, it
@@ -3094,43 +3023,11 @@ sub _error
    return;
 }
 
-sub _error_clear
-{
+sub _error_clear {
    return $_[0]->{_error} = undef;
 }
 
-sub require_version
-{
-   my ($this, @argv) = @_;
-
-   # Provide our own method for handling x.y.z version checks and the return
-   # value of VERISON() in older implementations of Perl.  V-string versions
-   # in Perl 5.10.0 are now treated as version objects and handled properly. 
-
-   if (@argv > 0) {
-      my $wanted = $argv[0];
-      if ($wanted =~ /(\d+)\.(\d{1,3})\.(\d{1,3})/) {
-         $argv[0] = sprintf '%d.%03d%03d', $1, $2, $3;
-      }
-   }
-
-   my $version = eval
-   {
-      sprintf '%d.%03d%03d', unpack 'C*', $this->UNIVERSAL::VERSION(@argv);
-   };
-
-   if ($@) {
-      local $_ = $@;
-      s/ at(?:.*)\n//;
-      require Carp;
-      Carp::croak($_);
-   }
-
-   return $version;
-}
-
-sub DEBUG_INFO
-{
+sub DEBUG_INFO {
    return $DEBUG if (!$DEBUG);
 
    return printf

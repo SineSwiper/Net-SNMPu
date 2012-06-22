@@ -8,7 +8,7 @@ use IO::Socket qw( SOCK_DGRAM );
 
 ## Handle importing/exporting of symbols
 
-use parent 'Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport';
+use parent qw( Net::SNMPu::Transport::IPv4 Net::SNMPu::Transport );
 
 sub import
 {
