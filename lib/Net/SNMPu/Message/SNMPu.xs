@@ -176,6 +176,7 @@ process_length (void)
       int cnt = res & 0x7f;
       res = 0;
 
+      char *err;
       switch (cnt)
         {
           case 0:
@@ -183,7 +184,8 @@ process_length (void)
             return 0;
 
           default:
-            error ( sprintf( "The ASN.1 length too long (%u bytes)", (unsigned int)cnt ) );
+            sprintf(err, "The ASN.1 length too long (%u bytes)", (unsigned int)cnt);
+            error(err);
             return 0;
 
           case 4: res = (res << 8) | get8 ();
@@ -204,7 +206,9 @@ process_integer32 (void)
   if (length <= 0)
     {
       // XXX: We should really be using asn1_itoa($type), instead of assuming "INTEGER32" //
-      error (sprintf (buf, "The %s length is equal to zero", "INTEGER32") );
+      char *err;
+      sprintf(err, "The %s length is equal to zero", "INTEGER32");
+      error(err);
       return 0;
     }
 
@@ -216,7 +220,9 @@ process_integer32 (void)
   if (length > 5 || (length > 4 && data [0]))
     {
       // XXX: We should really be using asn1_itoa($type), instead of assuming "INTEGER32" //
-      error ( sprintf( 'The %s length is too long (%u bytes)', "INTEGER32", (unsigned int)length ) );
+      char *err;
+      sprintf(err, "The %s length is too long (%u bytes)", "INTEGER32", (unsigned int)length);
+      error(err);
       return 0;
     }
 
@@ -250,7 +256,9 @@ process_integer64 (void)
   if (length <= 0)
     {
       // XXX: We should really be using asn1_itoa($type), instead of assuming "INTEGER64" //
-      error (sprintf (buf, "The %s length is equal to zero", "INTEGER64") );
+      char *err;
+      sprintf(err, "The %s length is equal to zero", "INTEGER64");
+      error(err);
       return 0;
     }
 
@@ -262,7 +270,9 @@ process_integer64 (void)
   if (length > 9 || (length > 8 && data [0]))
     {
       // XXX: We should really be using asn1_itoa($type), instead of assuming "INTEGER64" //
-      error ( sprintf( 'The %s length is too long (%u bytes)', "INTEGER64", (unsigned int)length ) );
+      char *err;
+      sprintf(err, "The %s length is too long (%u bytes)", "INTEGER64", (unsigned int)length);
+      error(err);
       return 0;
     }
 
@@ -412,7 +422,23 @@ process_sv (int *found)
 
 /////////////////////////////////////////////////////////////////////////////
 
-MODULE = Net::SNMPu		PACKAGE = Net::SNMPu::Message::XS
+#if HAVE_VERSIONSORT
+
+static int
+_index_cmp (const void *a_, const void *b_)
+{
+  const char *a = SvPVX (*(SV **)a_);
+  const char *b = SvPVX (*(SV **)b_);
+
+  a += *a == '.';
+  b += *b == '.';
+
+  return strverscmp (a, b);
+}
+
+#endif
+
+MODULE = Net::SNMPu::Message::XS		PACKAGE = Net::SNMPu::Message::XS
 
 PROTOTYPES: ENABLE
 
@@ -509,7 +535,7 @@ SV *
 _process_counter (BUFOBJ self, ...)
 	ALIAS:
         _process_gauge     = 0
-        _process_timeticks = 0
+        _process_timeticks = 1
 	CODE:
         RETVAL = process_unsigned32_sv ();
 	OUTPUT:
@@ -549,7 +575,9 @@ _process_ipaddress (BUFOBJ self, ...)
   	U32 length = process_length ();
         if (length != 4)
           {
-            error ( sprintf( "The IpAddress length of %u is invalid", (unsigned int)length ) );
+            char *err;
+            sprintf(err, "The IpAddress length of %u is invalid", (unsigned int)length);
+            error(err);
             XSRETURN_UNDEF;
           }
 
@@ -658,18 +686,6 @@ oid_base_match (SV *base_, SV *oid_)
 
 #if HAVE_VERSIONSORT
 
-static int
-oid_lex_cmp (const void *a_, const void *b_)
-{
-  const char *a = SvPVX (*(SV **)a_);
-  const char *b = SvPVX (*(SV **)b_);
-
-  a += *a == '.';
-  b += *b == '.';
-
-  return strverscmp (a, b);
-}
-
 void
 oid_lex_sort (...)
 	PROTOTYPE: @
@@ -685,7 +701,7 @@ oid_lex_sort (...)
               SvPV_force_nolen (sv);
           }
 
-        qsort (&ST (0), items, sizeof (SV *), oid_lex_cmp);
+        qsort (&ST (0), items, sizeof (SV *), _index_cmp);
 
         EXTEND (SP, items);
         // we cheat somewhat by not returning copies here
@@ -694,7 +710,7 @@ oid_lex_sort (...)
 }
 
 int
-_index_cmp (const char *a, const char *b)
+oid_lex_cmp (const char *a, const char *b)
 	PROTOTYPE: $$
         CODE:
         RETVAL = strverscmp (a, b);
