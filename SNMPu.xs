@@ -89,7 +89,7 @@ error (const char *errmsg)
   errflag = 1;
 
   if (!msg)
-    croak ("Net::SNMPu::Message.xs fatal error, parser called without parsing context");
+    croak ("Net::SNMPu::Message::XS.xs fatal error, parser called without parsing context");
 
   dSP;
   PUSHMARK (SP);
@@ -438,7 +438,7 @@ _index_cmp (const void *a_, const void *b_)
 
 #endif
 
-MODULE = Net::SNMPu::Message::XS		PACKAGE = Net::SNMPu::Message::XS
+MODULE = Net::SNMPu		PACKAGE = Net::SNMPu::Message::XS
 
 PROTOTYPES: ENABLE
 

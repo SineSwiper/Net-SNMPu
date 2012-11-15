@@ -3,85 +3,71 @@ package Net::SNMPu::Transport;
 # ABSTRACT: Base object for the Net::SNMPu Transport Domain objects.
 
 use sanity;
+use Moo;
+use MooX::Types::MooseLike::Base qw(InstanceOf);
 
-## Handle importing/exporting of symbols
+use Net::SNMPu::Constants ':domains :msgsize :ports :retries :timeout :bool';
 
-use parent qw( Exporter );
+use IO::Socket::IP;
+use List::AllUtils 'max';
 
-our @EXPORT_OK = qw( TRUE FALSE DEBUG_INFO );
-
-our %EXPORT_TAGS = (
-   domains => [
-      qw( DOMAIN_UDP DOMAIN_UDPIPV4 DOMAIN_UDPIPV6 DOMAIN_UDPIPV6Z
-          DOMAIN_TCPIPV4 DOMAIN_TCPIPV6 DOMAIN_TCPIPV6Z )
-   ],
-   msgsize => [ qw( MSG_SIZE_DEFAULT MSG_SIZE_MINIMUM MSG_SIZE_MAXIMUM ) ],
-   ports   => [ qw( SNMP_PORT SNMP_TRAP_PORT )                           ],
-   retries => [ qw( RETRIES_DEFAULT RETRIES_MINIMUM RETRIES_MAXIMUM )    ],
-   timeout => [ qw( TIMEOUT_DEFAULT TIMEOUT_MINIMUM TIMEOUT_MAXIMUM )    ],
-);
-
-Exporter::export_ok_tags( qw( domains msgsize ports retries timeout ) );
-
-$EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
-
-## Transport Layer Domain definitions
+### FIXME ###
 use constant {
-
-   # RFC 3417 Transport Mappings for SNMP
-   # Presuhn, Case, McCloghrie, Rose, and Waldbusser; December 2002
-   DOMAIN_UDP => '1.3.6.1.6.1.1',  # snmpUDPDomain
-
-   # RFC 3419 Textual Conventions for Transport Addresses
-   # Consultant, Schoenwaelder, and Braunschweig; December 2002
-   DOMAIN_UDPIPV4  => '1.3.6.1.2.1.100.1.1',  # transportDomainUdpIpv4
-   DOMAIN_UDPIPV6  => '1.3.6.1.2.1.100.1.2',  # transportDomainUdpIpv6
-   DOMAIN_UDPIPV6Z => '1.3.6.1.2.1.100.1.4',  # transportDomainUdpIpv6z
-   DOMAIN_TCPIPV4  => '1.3.6.1.2.1.100.1.5',  # transportDomainTcpIpv4
-   DOMAIN_TCPIPV6  => '1.3.6.1.2.1.100.1.6',  # transportDomainTcpIpv6
-   DOMAIN_TCPIPV6Z => '1.3.6.1.2.1.100.1.8',  # transportDomainTcpIpv6z
-   
-   ## SNMP well-known ports
-   SNMP_PORT            => 161,
-   SNMP_TRAP_PORT       => 162,
-   
-   ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
-   MSG_SIZE_DEFAULT     =>   484,
-   MSG_SIZE_MINIMUM     =>   484,
-   MSG_SIZE_MAXIMUM     => 65535,  # 2147483647 is not reasonable
-   
-   RETRIES_DEFAULT      =>   1,
-   RETRIES_MINIMUM      =>   0,
-   RETRIES_MAXIMUM      =>  20,
-   
-   TIMEOUT_DEFAULT      =>   5.0,
-   TIMEOUT_MINIMUM      =>   1.0,
-   TIMEOUT_MAXIMUM      =>  60.0,
-   
-   MAX_REQUESTS_DEFAULT =>     3,
-   MAX_REQUESTS_MINIMUM =>     0,
-   MAX_REQUESTS_MAXIMUM => 65535,
-   
-   ## Truth values
-   TRUE                 =>   1,
-   FALSE                =>   0,
-   
    ## Shared socket array indexes
-   _SHARED_SOCKET       =>   0,   # Shared Socket object
-   _SHARED_REFC         =>   1,   # Reference count
-   _SHARED_MAXSIZE      =>   2,   # Shared maxMsgSize
+   _SHARED_SOCKET  => 0,   # Shared Socket object
+   _SHARED_REFC    => 1,   # Reference count
+   _SHARED_MAXSIZE => 2,   # Shared maxMsgSize
 };
 
+### FIXME ###
 ## Package variables
-our $DEBUG = FALSE;                 # Debug flag
-our $AUTOLOAD;                      # Used by the AUTOLOAD method
 our $SOCKETS = {};                  # List of shared sockets
 
-# [public methods] -----------------------------------------------------------
+around BUILDARGS => sub {
+   my ($orig, $self) = (shift, shift);
+   my $hash = $self->_argument_munge(@_);
 
-sub new {
-   my ($class, %argv) = @_;
+   return $orig->($self, $hash)
+      if ($hash->{_socket} && $hash->{_dest});
 
+   my $newhash = {
+      dest_hostname => 'localhost',
+      dest_port     => 'snmp(161)',  # embedded ports in hostnames will override this
+   };
+
+   # Just get the arguments, and let IO::Socket::IP handle validation.
+   state $trans_argv = {qw{
+      hostname                 dest_hostname
+      (?:de?st|peer)?addr      dest_hostname
+      (?:de?st|peer)?port      dest_port
+      (?:src|sock|local)addr   sock_hostname
+      (?:src|sock|local)port   sock_port
+      max_?requests?           max_requests
+      max_?msg_?size|mtu       max_msg_size
+
+      retries  retries
+      timeout  timeout
+      domain   domain
+      listen   listen
+
+      session  session
+   }};
+
+   foreach my $key (keys %$hash) {
+      foreach my $re (keys %$trans_argv) {
+         if ($key =~ /^$re$/i) {
+            $newhash->{ $trans_argv->{$re} } = delete $hash->{$key};
+            last;
+         }
+      }
+      if ($hash->{$key}) {  # should have been deleted by now...
+         $hash->{session}->_error('The argument "%s" is unknown', $key);
+         return;
+      }
+   }
+   my $session = $newhash->{session};
+
+   # Translate/split domain
    state $domains = {
       'udp/?(?:ip)?v?4?'        => DOMAIN_UDPIPV4,
       quotemeta DOMAIN_UDP      => DOMAIN_UDPIPV4,
@@ -98,344 +84,461 @@ sub new {
       quotemeta DOMAIN_TCPIPV6  => DOMAIN_TCPIPV6,
       quotemeta DOMAIN_TCPIPV6Z => DOMAIN_TCPIPV6,
    };
-   
-   my ($s, $error);
-   my $domain = DOMAIN_UDPIPV4;
 
-   # See if a Transport Layer Domain argument has been passed.
+   foreach my $re (keys %$domains) {
+      if ($newhash->{domain} =~ /^$re$/i) {
+         $newhash->{domain} = $domains->{$re};
+         last;
+      }
+   }
+   $newhash->{domain} //= DOMAIN_UDPIPV4;
 
-   for (keys %argv) {
+   my ($proto, $domain, $size);
+   for ($newhash->{domain}) {
+      when (DOMAIN_UDPIPV4) { ($proto, $domain, $size) = ('udp', PF_INET , 1472); }  # Ethernet(1500) - IPv4(20) - UDP(8)
+      when (DOMAIN_UDPIPV6) { ($proto, $domain, $size) = ('udp', PF_INET6, 1452); }  # Ethernet(1500) - IPv6(40) - UDP(8)
+      when (DOMAIN_TCPIPV4) { ($proto, $domain, $size) = ('tcp', PF_INET , 1460); }  # Ethernet(1500) - IPv4(20) - TCP(20)
+      when (DOMAIN_TCPIPV6) { ($proto, $domain, $size) = ('tcp', PF_INET6, 1440); }  # Ethernet(1500) - IPv6(40) - TCP(20)
+      default {
+         $session->_error('The domain value "%s" is invalid', $newhash->{domain});
+         return;
+      }
+   }
 
-      if (/^-?domain$/i) {
+   $newhash->{max_msg_size} ||= $size;  # RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
 
-         my $key = $argv{$_};
-         $domain = undef;
+   # Translate the IO::Socket::IP arguments
+   state $trans2isi = {qw{
+      dest_hostname   PeerAddr
+      dest_port       PeerPort
+      sock_hostname   LocalAddr
+      sock_port       LocalPort
+      listen          Listen
+   }};
 
-         for (keys %{$domains}) {
-            if ($key =~ /^$_$/i) {
-               $domain = $domains->{$_};
-               last;
+   my $sock_args = {};
+   foreach my $key (keys %$trans2isi) {
+      $sock_args->{ $trans2isi->{$key} } = delete $newhash->{$key}
+         if ($newhash->{$key});
+   }
+
+   # Put back the *_hostnames
+   $newhash->{sock_hostname} = $sock_args->{LocalAddr};
+   $newhash->{dest_hostname} = $sock_args->{PeerAddr};
+
+   $sock_args->{Proto}    = $proto;
+   $sock_args->{Domain}   = $domain;
+   $sock_args->{Type}     = $proto eq 'tcp' ? SOCK_STREAM : SOCK_DGRAM;
+   $sock_args->{Blocking} = FALSE;
+
+   # Build dest_args and remove destination if UDP
+   my $dest_args = { %$sock_args };
+   if ($proto eq 'udp') {
+      delete $sock_args->{PeerAddr};
+      delete $sock_args->{PeerPort};
+   }
+
+   # Build the "info" socket first
+   unless ( $newhash->{_dest} = IO::Socket::IP->new(%$dest_args) ) {
+      $session->_error('Cannot create dest socket: %s', $!);
+      return;
+   }
+
+   # For all connection-oriented transports and for each unique source
+   # address for connectionless transports, create a new socket.
+   my ($sock_name, $dest_name) = ($newhash->{_dest}->sockname, $newhash->{_dest}->peername);
+
+   if ($proto eq 'tcp' || !exists $SOCKETS->{$sock_name}) {
+      # Create the real socket
+      unless ( $newhash->{_socket} = IO::Socket::IP->new(%$sock_args) ) {
+         $session->_error('Cannot create new socket: %s', $!);
+         return;
+      }
+      my $socket = $newhash->{_socket};
+      DEBUG_INFO('opened %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+
+      # Bind the socket.
+      if (!defined $socket->bind($sock_name)) {
+         $session->_error('Failed to bind %s/%s socket: %s', $proto, $domain, $!);
+         return;
+      }
+
+      # For connection-oriented transports, we either listen or connect.
+      if ($proto eq 'tcp') {
+         if ($sock_args->{Listen}) {
+            if (!defined $socket->listen($sock_name)) {
+               $session->_error('Failed to listen on %s/%s socket: %s', $proto, $domain, $!);
+               return;
             }
          }
-
-         if (!defined $domain) {
-            $error = err_msg(
-               'The transport domain "%s" is unknown', $argv{$_}
-            );
-            return wantarray ? (undef, $error) : undef;
+         else {
+            if (!defined $socket->connect($dest_name)) {
+               $session->_error("Failed to connect to remote host '%s': %s", $newhash->{dest_hostname}, $!);
+               return;
+            }
          }
-
-         $argv{$_} = $domain;
       }
 
-   }
+      ### TODO: This needs to be changed to something a bit more thread safe... ###
 
-   # Return the appropriate object based on the Transport Domain.  To
-   # avoid consuming unnecessary resources, only load the appropriate
-   # module when requested.   Some modules require non-core modules and
-   # if these modules are not present, we gracefully return an error. 
+      # Add the socket to the global socket list with a reference
+      # count to track when to close the socket and the maxMsgSize
+      # associated with this new object for connectionless transports.
 
-   for ($domain) {
-      when (DOMAIN_UDPIPV6) {
-         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::UDP');
-         if ($error) {
-            $error = 'UDP/IPv6 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
-         }
-         return Net::SNMPu::Transport::IPv6::UDP->new(%argv);
+      if ($proto eq 'udp') {
+         $newhash->{_sock_param} = $SOCKETS->{$sock_name} = [
+            $newhash->{socket},        # Shared Socket object
+            1,                         # Reference count
+            $newhash->{max_msg_size},  # Shared maximum message size
+         ];
       }
-      when (DOMAIN_TCPIPV6) {
-         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv6::TCP');
-         if ($error) {
-            $error = 'TCP/IPv6 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
-         }
-         return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
+      else {
+         # Reassembly buffer required for TCP
+         $newhash->{_reasm_object} = Net::SNMPu::Message->new;
       }
-      when (DOMAIN_TCPIPV4) {
-         ($s, $error) = Class::Load::try_load_class('Net::SNMPu::Transport::IPv4::TCP');
-         if ($error) {
-            $error = 'TCP/IPv4 support is unavailable ' . $error;
-            return wantarray ? (undef, $error) : undef;
-         }
-         return Net::SNMPu::Transport::IPv6::TCP->new(%argv);
-      }
-      # Load the default Transport Domain module without eval protection.
-      default {
-         require Net::SNMPu::Transport::IPv4::UDP;
-         return  Net::SNMPu::Transport::IPv4::UDP->new(%argv);
-      }
-   }
-
-}
-
-sub max_msg_size {
-   my ($this, $size) = @_;
-
-   if (@_ < 2) {
-      return $this->{_max_msg_size};
-   }
-
-   $this->_error_clear();
-
-   if ($size !~ m/^\d+$/) {
-      return $this->_error(
-         'The maxMsgSize value "%s" is expected in positive numeric format',
-         $size
-      );
-   }
-
-   if ($size < MSG_SIZE_MINIMUM || $size > MSG_SIZE_MAXIMUM) {
-      return $this->_error(
-         'The maxMsgSize value %s is out of range (%d..%d)',
-         $size, MSG_SIZE_MINIMUM, MSG_SIZE_MAXIMUM
-      );
-   }
-
-   # Adjust the share maximum size if necessary.
-   $this->_shared_max_size($size);
-
-   return $this->{_max_msg_size} = $size;
-}
-
-sub max_requests {
-   my ($this, $max_requests) = @_;
-
-   if (@_ < 2) {
-      return $this->{_max_requests};
-   }
-
-   $this->_error_clear();
-
-   if ($max_requests !~ m/^\d+(?:\.\d+)?$/) {
-      return $this->_error(
-         'The max requests value "%s" is expected in positive numeric format',
-         $max_requests
-      );
-   }
-
-   if ($max_requests < MAX_REQUESTS_MINIMUM || $max_requests > MAX_REQUESTS_MAXIMUM) {
-      return $this->_error(
-         'The max requests value %s is out of range (%d..%d)',
-         $max_requests, MAX_REQUESTS_MINIMUM, MAX_REQUESTS_MAXIMUM
-      );
-   }
-
-   return $this->{_max_requests} = $max_requests;
-}
-
-sub timeout {
-   my ($this, $timeout) = @_;
-
-   if (@_ < 2) {
-      return $this->{_timeout};
-   }
-
-   $this->_error_clear();
-
-   if ($timeout !~ m/^\d+(?:\.\d+)?$/) {
-      return $this->_error(
-         'The timeout value "%s" is expected in positive numeric format',
-         $timeout
-      );
-   }
-
-   if ($timeout < TIMEOUT_MINIMUM || $timeout > TIMEOUT_MAXIMUM) {
-      return $this->_error(
-         'The timeout value %s is out of range (%d..%d)',
-         $timeout, TIMEOUT_MINIMUM, TIMEOUT_MAXIMUM
-      );
-   }
-
-   return $this->{_timeout} = $timeout;
-}
-
-sub retries {
-   my ($this, $retries) = @_;
-
-   if (@_ < 2) {
-      return $this->{_retries};
-   }
-
-   $this->_error_clear();
-
-   if ($retries !~ m/^\d+$/) {
-      return $this->_error(
-         'The retries value "%s" is expected in positive numeric format',
-         $retries
-      );
-   }
-
-   if ($retries < RETRIES_MINIMUM || $retries > RETRIES_MAXIMUM) {
-      return $this->_error(
-         'The retries value %s is out of range (%d..%d)',
-         $retries, RETRIES_MINIMUM, RETRIES_MAXIMUM
-      );
-   }
-
-   return $this->{_retries} = $retries;
-}
-
-### TODO: This whole thing needs a Moo treatment badly... ###
-
-sub debug {
-   return (@_ == 2) ? $DEBUG = ($_[1]) ? TRUE : FALSE : $DEBUG;
-}
-
-use constant {
-   agent_addr     => '0.0.0.0',
-   connectionless => TRUE,
-   domain         => '0.0',
-   type           => '<unknown>',  # unknown(0)
-};
-
-sub error  { return $_[0]->{_error} || q{}; }
-sub fileno { return defined($_[0]->{_socket}) ? $_[0]->{_socket}->fileno() : undef; }
-sub socket { return $_[0]->{_socket}; }
-
-sub sock_name {
-   if (defined $_[0]->{_socket}) {
-      return $_[0]->{_socket}->sockname() || $_[0]->{_sock_name};
    }
    else {
-      return $_[0]->{_sock_name};
+      # Bump up the reference count.
+      $SOCKETS->{$sock_name}->[_SHARED_REFC]++;
+
+      # Assign the socket to the object.
+      my $socket = $newhash->{_socket}     = $SOCKETS->{$sock_name}->[_SHARED_SOCKET];
+      my $sparam = $newhash->{_sock_param} = $SOCKETS->{$sock_name};
+
+      # Adjust the shared maxMsgSize if necessary.
+      $sparam->[_SHARED_MAXSIZE] = $newhash->{max_msg_size} = max($sparam->[_SHARED_MAXSIZE], $newhash->{max_msg_size});
+
+      DEBUG_INFO('reused %s/%s socket [%d]', $proto, $domain, $socket->fileno);
    }
-}
 
-sub sock_hostname {
-   return $_[0]->{_sock_hostname} || $_[0]->sock_address();
-}
+   $orig->($self, $newhash);
+};
 
-sub sock_address {
-   return $_[0]->_address($_[0]->sock_name());
-}
+# [attributes] ------------------------------------------------------------------
 
-sub sock_addr {
-   return $_[0]->_addr($_[0]->sock_name());
-}
-
-sub sock_port {
-   return $_[0]->_port($_[0]->sock_name());
-}
-
-sub sock_taddress {
-   return $_[0]->_taddress($_[0]->sock_name());
-}
-
-sub sock_taddr {
-   return $_[0]->_taddr($_[0]->sock_name());
-}
-
-sub sock_tdomain {
-   return $_[0]->_tdomain($_[0]->sock_name());
-}
-
-sub dest_name {
-   return $_[0]->{_dest_name};
-}
-
-sub dest_hostname {
-   return $_[0]->{_dest_hostname} || $_[0]->dest_address();
-}
-
-sub dest_address {
-   return $_[0]->_address($_[0]->dest_name());
-}
-
-sub dest_addr {
-   return $_[0]->_addr($_[0]->dest_name());
-}
-
-sub dest_port {
-   return $_[0]->_port($_[0]->dest_name());
-}
-
-sub dest_taddress {
-   return $_[0]->_taddress($_[0]->dest_name());
-}
-
-sub dest_taddr {
-   return $_[0]->_taddr($_[0]->dest_name());
-}
-
-sub dest_tdomain {
-   return $_[0]->_tdomain($_[0]->dest_name());
-}
-
-sub peer_name {
-   if (defined $_[0]->{_socket}) {
-      return $_[0]->{_socket}->peername() || $_[0]->dest_name();
-   } else {
-      return $_[0]->dest_name();
-   }
-}
-
-sub peer_hostname {
-   return $_[0]->peer_address();
-}
-
-sub peer_address {
-   return $_[0]->_address($_[0]->peer_name());
-}
-
-sub peer_addr {
-   return $_[0]->_addr($_[0]->peer_name());
-}
-
-sub peer_port {
-   return $_[0]->_port($_[0]->peer_name());
-}
-
-sub peer_taddress {
-   return $_[0]->_taddress($_[0]->peer_name());
-}
-
-sub peer_taddr {
-   return $_[0]->_taddr($_[0]->peer_name());
-}
-
-sub peer_tdomain {
-   return $_[0]->_tdomain($_[0]->peer_name());
-}
-
-sub AUTOLOAD {
-   my $this = shift;
-
-   return if $AUTOLOAD =~ /::DESTROY$/;
-
-   $AUTOLOAD =~ s/.*://;
-
-   if (ref $this) {
-      if (defined($this->{_socket}) && ($this->{_socket}->can($AUTOLOAD))) {
-         return $this->{_socket}->$AUTOLOAD(@_);
-      } else {
-         $this->_error_clear();
-         return $this->_error(
-            'The method "%s" is not supported by this Transport Domain',
-            $AUTOLOAD
-         );
+has max_msg_size => (
+   is      => 'rw',
+   isa     => sub { __validate_posnum('maxMsgSize', $_[0], MSG_SIZE_MINIMUM, MSG_SIZE_MAXIMUM); },
+   trigger => sub {
+      my ($self, $val, $oldval) = @_;
+      if ($self->_has_sock_param) {
+         return $self->_sock_param->[_SHARED_MAXSIZE] = max($self->_sock_param->[_SHARED_MAXSIZE], $val);
       }
-   } else {
-      require Carp;
-      Carp::croak(sprintf 'The function "%s" is not supported', $AUTOLOAD);
-   }
+      return $val;
+   },
+);
 
-   # Never get here.
-   return;
+has max_requests => (
+   is      => 'rw',
+   isa     => sub { __validate_posnum('max requests', $_[0], MAX_REQUESTS_MINIMUM, MAX_REQUESTS_MAXIMUM); },
+   lazy    => 1,
+   default => sub { MAX_REQUESTS_DEFAULT },
+);
+
+has retries => (
+   is      => 'rw',
+   isa     => sub { __validate_posnum('retries', $_[0], RETRIES_MINIMUM, RETRIES_MAXIMUM); },
+   lazy    => 1,
+   default => sub { RETRIES_DEFAULT },
+);
+
+has timeout => (
+   is      => 'rw',
+   isa     => sub { __validate_posnum('timeout', $_[0], TIMEOUT_MINIMUM, TIMEOUT_MAXIMUM); },
+   lazy    => 1,
+   default => sub { TIMEOUT_DEFAULT },
+);
+
+sub __validate_posnum {
+   my ($type, $num, $min, $max) = @_;
+   die sprintf(
+      'The %s value "%s" is expected in positive numeric format',
+      $type, $num
+   ) unless ($type eq 'timeout' ? $num =~ /^\d+(?:\.\d+)?$/ : $num =~ /^\d+$/);
+
+   die sprintf(
+      'The %s value "%s" is out of range (%d..%d)',
+      $type, $num, $min, $max
+   ) if ($num < $min || $num > $max);
+
+   return TRUE;
 }
 
-sub DESTROY {
-   my ($this) = @_;
+has session => (
+   is        => 'ro',
+   isa       => InstanceOf['Net::SNMPu'],
+   predicate => 1,
+   handles   => [qw(
+      debug
+      error
+      _error
+      _clear_error
+      _argument_munge
+   )],
+);
+
+# Online, in-use socket
+has socket => (
+   is        => 'ro',
+   isa       => InstanceOf['IO::Socket::IP'],
+   predicate => 1,
+   init_arg  => '_socket',
+   handles   => {qw{
+      fileno      fileno
+      connected   connected
+
+      sockhost    sock_address
+      sockport    sock_port
+      sockaddr    sock_addr
+      sockdomain  sock_domain
+      sockname    sock_name
+      sockscope   sock_scope_id
+      sockflow    sock_flowinfo
+
+      peerhost    peer_address
+      peerport    peer_port
+      peeraddr    peer_addr
+      peerdomain  peer_domain
+      peername    peer_name
+      peerscope   peer_scope_id
+      peerflow    peer_flowinfo
+   }},
+);
+
+has _sock_param => (
+   is        => 'ro',
+   isa       => ArrayRef,
+   predicate => 'connectionless',
+);
+
+# Socket object only for the purposes of storing destination information
+has dest => (
+   is        => 'ro',
+   isa       => InstanceOf['IO::Socket::IP'],
+   predicate => 1,
+   init_arg  => '_dest',
+   handles   => {qw{
+      peerhost    dest_address
+      peerport    dest_port
+      peeraddr    dest_addr
+      peerdomain  dest_domain
+      peername    dest_name
+      peerscope   dest_scope_id
+      peerflow    dest_flowinfo
+   }},
+);
+
+has sock_hostname => (
+   is        => 'ro',
+   isa       => Str,
+   predicate => 1,
+);
+has dest_hostname => (
+   is        => 'ro',
+   isa       => Str,
+   predicate => 1,
+);
+
+has _reasm_object => (
+   is        => 'ro',
+   isa       => InstanceOf['Net::SNMPu::Message'],
+   predicate => 1,
+);
+has _reasm_buffer => (
+   is        => 'rw',
+   isa       => ScalarRef[Str],
+   predicate => 1,
+   clearer   => 1,
+);
+has _reasm_length => (
+   is        => 'rw',
+   isa       => Int,
+   clearer   => 1,
+);
+
+### FIXME: Replace occurrences with sock_address ###
+#sub agent_addr { return shift->sock_address; }
+
+# [public methods] -----------------------------------------------------------
+
+sub accept {
+   my $self = shift;
+   $self->_clear_error;
+
+   my $socket = $self->socket->accept || return $self->_error('Failed to accept the connection');
+
+   DEBUG_INFO('accepted %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+
+   # Create a new object by copying the current object.
+   return $self->new(
+      _socket       => $socket,
+      _dest         => $socket,
+      _reasm_object => Net::SNMPu::Message->new,
+      _sock_param   => $self->_sock_param,
+      session       => $self->session,
+      sock_hostname => $self->sock_hostname,
+      dest_hostname => $socket->sockhost,
+
+      max_msg_size  => $self->max_msg_size,
+      max_requests  => $self->max_requests,
+      retries       => $self->retries,
+      timeout       => $self->timeout,
+   );
+}
+
+sub send {
+   my $self = shift;
+   $self->_clear_error;
+
+   if (length($_[0]) > $self->max_msg_size) {
+      return $self->_error(
+         'The message size %d exceeds the maxMsgSize %d',
+         length($_[0]), $self->max_msg_size
+      );
+   }
+
+   unless ($self->connectionless || $self->connected) {
+      return $self->_error(
+         "Not connected to the remote host '%s'", $self->dest_hostname
+      );
+   }
+
+   return $self->socket->send(
+      $_[0], 0,
+      $self->connectionless ? $self->dest_name : ()
+   ) // $self->_error('Send failure: %s', $!);
+}
+
+sub recv {
+   my $self = shift;
+   $self->_clear_error;
+
+   # Short and simple UDP version
+   if ($self->connectionless) {
+      return $self->socket->recv(
+         $_[0], $self->max_msg_size, 0
+      ) // $self->_error('Receive failure: %s', $!);
+   }
+
+   unless ($self->connected) {
+      $self->_reasm_reset;
+      return $self->_error(
+         "Not connected to the remote host '%s'", $self->dest_hostname
+      );
+   }
+
+   # RCF 3430 Section 2.1 - "It is possible that the underlying TCP
+   # implementation delivers byte sequences that do not align with
+   # SNMP message boundaries.  A receiving SNMP engine MUST therefore
+   # use the length field in the BER-encoded SNMP message to separate
+   # multiple requests sent over a single TCP connection (framing).
+   # An SNMP engine which looses framing (for example due to ASN.1
+   # parse errors) SHOULD close the TCP connection."
+
+   # If the reassembly buffer is empty then there is no partial message
+   # waiting for completion.  We must then process the message length
+   # to properly determine how much data to receive.
+
+   unless ($self->_has_reasm_buffer) {
+      return $self->_error('The reassembly object is not defined')
+         unless $self->_has_reasm_object;
+      my $reasm = $self->_reasm_object;
+
+      # Read enough data to parse the ASN.1 type and length.
+      my $buffer = '';
+      my $name = $self->socket->recv($buffer, 6, 0);
+
+      unless (defined $name && not $!) {
+         $self->_reasm_reset;
+         return $self->_error('Receive failure: %s', $!);
+      }
+      elsif (!length $buffer) {
+         $self->_reasm_reset;
+         return $self->_error("The connection was closed by the remote host '%s'", $self->dest_hostname);
+      }
+
+      $reasm->append($buffer);
+
+      my $len = $reasm->process(SEQUENCE) || 0;
+      if (!$len || $len > MSG_SIZE_MAXIMUM) {
+         $self->_reasm_reset;
+         return $self->_error("Message framing was lost with the remote host '%s'", $self->dest_hostname);
+      }
+
+      # Add in the bytes parsed to define the expected message length.
+      $len += $reasm->index;
+
+      # Store attributes
+      $self->_reasm_buffer(\$buffer);
+      $self->_reasm_length($len);
+   }
+
+   # Setup a temporary buffer for the message and set the length
+   # based upon the contents of the reassembly buffer.
+
+   my $rbuffer = $self->_reasm_buffer;
+   my $buf     = '';
+   my $buf_len = length $$rbuffer;
+
+   # Read the rest of the message.
+   my $name = $self->socket->recv($buf, ($self->_reasm_length - $buf_len), 0);
+
+   unless (defined $name && not $!) {
+      $self->_reasm_reset;
+      return $self->_error('Receive failure: %s', $!);
+   }
+   elsif (!length $buf) {
+      $self->_reasm_reset;
+      return $self->_error("The connection was closed by the remote host '%s'", $self->dest_hostname);
+   }
+
+   # Now see if we have the complete message.  If it is not complete,
+   # success is returned with an empty buffer.  The application must
+   # continue to call recv() until the message is reassembled.
+
+   $buf_len += length $buf;
+   $$rbuffer .= $buf;
+
+   if ($buf_len < $self->_reasm_length) {
+      DEBUG_INFO(
+         'message is incomplete (expect %u bytes, have %u bytes)',
+         $self->_reasm_length, $buf_len
+      );
+      $_[0] = '';
+      return $name || $self->connected;
+   }
+
+   # Validate the maxMsgSize.
+   if ($buf_len > $self->max_msg_size) {
+      $self->_reasm_reset;
+      return $self->_error(
+         'Incoming message size %d exceeded the maxMsgSize %d',
+         $buf_len, $self->max_msg_size
+      );
+   }
+
+   # The message is complete, copy the buffer to the caller.
+   $_[0] = $$rbuffer;
+
+   # Clear the reassembly buffer and length.
+   $self->_reasm_reset;
+
+   return $name || $self->connected;
+}
+
+sub DEMOLISH {
+   my ($self) = @_;
 
    # Connection-oriented transports do not share sockets.
-   return if !$this->connectionless();
+   return if !$self->connectionless;
 
    # If the shared socket structure exists, decrement the reference count
-   # and clear the shared socket structure if it is no longer being used. 
+   # and clear the shared socket structure if it is no longer being used.
 
-   if (defined($this->{_sock_name}) && exists $SOCKETS->{$this->{_sock_name}}) {
-      if (--$SOCKETS->{$this->{_sock_name}}->[_SHARED_REFC] < 1) {
-         delete $SOCKETS->{$this->{_sock_name}};
+   my $sock_name = $self->sock_name;
+   if (defined($sock_name) && exists $SOCKETS->{$sock_name}) {
+      if (--$SOCKETS->{$sock_name}->[_SHARED_REFC] < 1) {
+         delete $SOCKETS->{$sock_name};
       }
    }
 
@@ -444,305 +547,15 @@ sub DESTROY {
 
 # [private methods] ----------------------------------------------------------
 
-sub _new {
-   my ($class, %argv) = @_;
+sub _reasm_reset {
+   my $self = shift;
 
-   my $this = bless {
-      '_dest_hostname' => 'localhost',                 # Destination hostname
-      '_dest_name'     => undef,                       # Destination sockaddr
-      '_error'         => undef,                       # Error message
-      '_max_msg_size'  => $class->_msg_size_default(), # maxMsgSize
-      '_max_requests'  => MAX_REQUESTS_DEFAULT,        # Max # of new requests
-      '_retries'       => RETRIES_DEFAULT,             # Number of retries      
-      '_socket'        => undef,                       # Socket object
-      '_sock_hostname' => q{},                         # Socket hostname
-      '_sock_name'     => undef,                       # Socket sockaddr
-      '_timeout'       => TIMEOUT_DEFAULT,             # Timeout period (secs)
-   }, $class;
-
-   # Default the values for the "name (sockaddr) hashes".
-
-   my $sock_nh = { port => 0,         addr => $this->_addr_any()      };
-   my $dest_nh = { port => SNMP_PORT, addr => $this->_addr_loopback() };
-
-   # Validate the "port" arguments first to allow for a consistency
-   # check with any values passed with the "address" arguments.
-
-   my ($dest_port, $sock_port, $listen) = (undef, undef, 0);
-
-   for (keys %argv) {
-
-      if (/^-?debug$/i) {
-         $this->debug(delete $argv{$_});
-      } elsif (/^-?(?:de?st|peer)?port$/i) {
-         $this->_service_resolve(delete($argv{$_}), $dest_nh);
-         $dest_port = $dest_nh->{port};
-      } elsif (/^-?(?:src|sock|local)port$/i) {
-         $this->_service_resolve(delete($argv{$_}), $sock_nh);
-         $sock_port = $sock_nh->{port};
-      }
-
-      if (defined $this->{_error}) {
-         return wantarray ? (undef, $this->{_error}) : undef;
-      }
+   if ($self->_has_reasm_object) {
+      $self->_reasm_object->_clear_error;
+      $self->_reasm_object->clear;
    }
-
-   # Validate the rest of the arguments.
-
-   for (keys %argv) {
-
-      if (/^-?domain$/i) {
-         if ($argv{$_} ne $this->domain()) {
-            $this->_error(
-               'The domain value "%s" was expected, but "%s" was found',
-               $this->domain(), $argv{$_}
-            );
-         }
-      } elsif ((/^-?hostname$/i) || (/^-?(?:de?st|peer)?addr$/i)) {
-         $this->_hostname_resolve(
-            $this->{_dest_hostname} = $argv{$_}, $dest_nh
-         );
-         if (defined($dest_port) && ($dest_port != $dest_nh->{port})) {
-            $this->_error(
-               'Inconsistent %s port information was specified (%d != %d)',
-               $this->type(), $dest_port, $dest_nh->{port}
-            );
-         }
-      } elsif (/^-?(?:src|sock|local)addr$/i) {
-         $this->_hostname_resolve(
-            $this->{_sock_hostname} = $argv{$_}, $sock_nh
-         );
-         if (defined($sock_port) && ($sock_port != $sock_nh->{port})) {
-            $this->_error(
-               'Inconsistent %s port information was specified (%d != %d)',
-               $this->type(), $sock_port, $sock_nh->{port}
-            );
-         }
-      } elsif (/^-?listen$/i) {
-         if (($argv{$_} !~ /^\d+$/) || ($argv{$_} < 1)) {
-            $this->_error(
-               'The listen queue size value "%s" was expected in positive ' .
-               'non-zero numeric format', $argv{$_}
-            );
-         } elsif (!$this->connectionless()) {
-            $listen = $argv{$_};
-         }
-      } elsif ((/^-?maxmsgsize$/i) || (/^-?mtu$/i)) {
-         $this->max_msg_size($argv{$_});
-      } elsif (/^-?maxrequests?$/i) {
-         $this->max_requests($argv{$_});
-      } elsif (/^-?retries$/i) {
-         $this->retries($argv{$_});
-      } elsif (/^-?timeout$/i) {
-         $this->timeout($argv{$_});
-      } else {
-         $this->_error('The argument "%s" is unknown', $_);
-      }
-
-      if (defined $this->{_error}) {
-         return wantarray ? (undef, $this->{_error}) : undef;
-      }
-
-   }
-
-   # Pack the socket name (sockaddr) information.
-   $this->{_sock_name} = $this->_name_pack($sock_nh);
-
-   # Pack the destination name (sockaddr) information.
-   $this->{_dest_name} = $this->_name_pack($dest_nh);
-
-   # For all connection-oriented transports and for each unique source 
-   # address for connectionless transports, create a new socket. 
-
-   if (!$this->connectionless() || !exists $SOCKETS->{$this->{_sock_name}}) {
-
-      # Create a new IO::Socket object.
-
-      if (!defined ($this->{_socket} = $this->_socket_create())) {
-         $this->_perror('Failed to open %s socket', $this->type());
-         return wantarray ? (undef, $this->{_error}) : undef
-      }
-
-      DEBUG_INFO('opened %s socket [%d]', $this->type(), $this->fileno());
-
-      # Bind the socket.
-
-      if (!defined $this->{_socket}->bind($this->{_sock_name})) {
-         $this->_perror('Failed to bind %s socket', $this->type());
-         return wantarray ? (undef, $this->{_error}) : undef
-      }
-
-      # For connection-oriented transports, we either listen or connect.
-
-      if (!$this->connectionless()) {
-
-         if ($listen) {
-            if (!defined $this->{_socket}->listen($listen)) {
-               $this->_perror('Failed to listen on %s socket', $this->type());
-               return wantarray ? (undef, $this->{_error}) : undef
-            }
-         } else {
-            if (!defined $this->{_socket}->connect($this->{_dest_name})) {
-               $this->_perror(
-                  q{Failed to connect to remote host '%s'},
-                  $this->dest_hostname()
-               );
-               return wantarray ? (undef, $this->{_error}) : undef
-            }
-         }
-      }
-
-      # Flag the socket as non-blocking outside of socket creation or 
-      # the object instantiation fails on some systems (e.g. MSWin32). 
-
-      $this->{_socket}->blocking(FALSE);
-
-      # Add the socket to the global socket list with a reference
-      # count to track when to close the socket and the maxMsgSize
-      # associated with this new object for connectionless transports.
-
-      if ($this->connectionless()) {
-         $SOCKETS->{$this->{_sock_name}} = [
-            $this->{_socket},       # Shared Socket object
-            1,                      # Reference count
-            $this->{_max_msg_size}, # Shared maximum message size
-         ];
-      }
-
-   } else {
-
-      # Bump up the reference count.
-      $SOCKETS->{$this->{_sock_name}}->[_SHARED_REFC]++;
-
-      # Assign the socket to the object.
-      $this->{_socket} = $SOCKETS->{$this->{_sock_name}}->[_SHARED_SOCKET];
-
-      # Adjust the shared maxMsgSize if necessary.
-      $this->_shared_max_size($this->{_max_msg_size});
-
-      DEBUG_INFO('reused %s socket [%d]', $this->type(), $this->fileno());
-
-   }
-
-   # Return the object and empty error message (in list context)
-   return wantarray ? ($this, q{}) : $this;
-}
-
-sub _service_resolve {
-   my ($this, $serv, $nh) = @_;
-
-   $nh->{port} = undef;
-
-   if ($serv !~ /^\d+$/) {
-      my $port = ($serv =~ s/\((\d+)\)$//) ? ($1 > 65535) ? undef : $1 : undef;
-      $nh->{port} = getservbyname($serv, $this->_protocol_name()) || $port;
-      if (!defined $nh->{port}) {
-         return $this->_error(
-            'Unable to resolve the %s service name "%s"', $this->type(), $_[1]
-         );
-      }
-   } elsif ($serv > 65535) {
-      return $this->_error(
-         'The %s port number %s is out of range (0..65535)',
-         $this->type(), $serv
-      );
-   } else {
-      $nh->{port} = $serv;
-   }
-
-   return $nh->{port};
-}
-
-sub _protocol {
-   return (getprotobyname $_[0]->_protocol_name())[2];
-}
-
-sub _shared_max_size {
-   my ($this, $size) = @_;
-
-   # Connection-oriented transports do not share sockets.
-   if (!$this->connectionless()) {
-      return $this->{_max_msg_size};
-   }
-
-   if (@_ == 2) {
-
-      # Handle calls during object creation.
-      if (!defined $this->{_sock_name}) {
-         return $this->{_max_msg_size};
-      }
-
-      # Update the shared maxMsgSize if the passed
-      # value is greater than the current size.
-
-      if ($size > $SOCKETS->{$this->{_sock_name}}->[_SHARED_MAXSIZE]) {
-         $SOCKETS->{$this->{_sock_name}}->[_SHARED_MAXSIZE] = $size;
-      }
-
-   }
-
-   return $SOCKETS->{$this->{_sock_name}}->[_SHARED_MAXSIZE];
-}
-
-use constant _msg_size_default => MSG_SIZE_DEFAULT;
-
-sub _error {
-   my $this = shift;
-
-   if (!defined $this->{_error}) {
-      $this->{_error} = (@_ > 1) ? sprintf(shift(@_), @_) : $_[0];
-      if ($this->debug()) {
-         printf "error: [%d] %s(): %s\n",
-                (caller 0)[2], (caller 1)[3], $this->{_error};
-      }
-   }
-
-   return;
-}
-
-sub strerror {
-   if ($! =~ /^Unknown error/) {
-      return sprintf '%s', $^E if ($^E);
-      require Errno;
-      for (keys (%!)) {
-         if ($!{$_}) {
-            return sprintf 'Error %s', $_;
-         }
-      }
-      return sprintf '%s (%d)', $!, $!;
-   }
-
-   return $! ? sprintf('%s', $!) : 'No error';
-}
-
-sub _perror {
-   my $this = shift;
-
-   if (!defined $this->{_error}) {
-      $this->{_error}  = ((@_ > 1) ? sprintf(shift(@_), @_) : $_[0]) || q{};
-      $this->{_error} .= (($this->{_error}) ? ': ' : q{}) . strerror();
-      if ($this->debug()) {
-         printf "error: [%d] %s(): %s\n",
-                (caller 0)[2], (caller 1)[3], $this->{_error};
-      }
-   }
-
-   return;
-}
-
-sub _error_clear {
-   $! = 0;
-   return $_[0]->{_error} = undef;
-}
-
-sub err_msg {
-   my $msg = (@_ > 1) ? sprintf(shift(@_), @_) : $_[0];
-
-   if ($DEBUG) {
-      printf "error: [%d] %s(): %s\n", (caller 0)[2], (caller 1)[3], $msg;
-   }
-
-   return $msg;
+   $self->_clear_reasm_buffer;
+   $self->_clear_reasm_length;
 }
 
 sub DEBUG_INFO {

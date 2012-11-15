@@ -3,12 +3,13 @@ package Net::SNMPu::PDU;
 # ABSTRACT: Object used to represent a SNMP PDU. 
 
 use sanity;
-use Net::SNMPu::Message qw( 
-   :types :versions asn1_itoa ENTERPRISE_SPECIFIC TRUE FALSE DEBUG_INFO 
+use Net::SNMPu::Message;
+use Net::SNMPu::Constants qw( 
+   :types :versions ENTERPRISE_SPECIFIC TRUE FALSE DEBUG_INFO 
 );
-use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 DOMAIN_TCPIPV4 );
+use Net::SNMPu::Utils 'asn1_itoa';
 
-## Handle importing/exporting of symbols
+use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 DOMAIN_TCPIPV4 );
 
 use parent 'Net::SNMPu::Message';
 

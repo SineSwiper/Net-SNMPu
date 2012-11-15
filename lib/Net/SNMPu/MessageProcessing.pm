@@ -3,9 +3,11 @@ package Net::SNMPu::MessageProcessing;
 # ABSTRACT: Object that implements the Message Processing module.
 
 use sanity;
-use Net::SNMPu::PDU qw( 
-   :types :msgFlags :securityLevels asn1_itoa SNMP_VERSION_3 TRUE FALSE 
+use Net::SNMPu::PDU
+use Net::SNMPu::Constants qw( 
+   :types :msgFlags :securityLevels :bool SNMP_VERSION_3 
 );
+use Net::SNMPu::Utils 'asn1_itoa';
 
 srand( time() ^ ($$ + ($$ <<15)) );
 
