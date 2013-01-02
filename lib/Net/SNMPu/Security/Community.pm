@@ -3,11 +3,11 @@ package Net::SNMPu::Security::Community;
 # ABSTRACT: Object that implements the SNMPv1/v2c Community-based Security Model.
 
 use sanity;
-use Net::SNMPu::Security qw( 
-   SECURITY_MODEL_SNMPV1 SECURITY_MODEL_SNMPV2C DEBUG_INFO
-);
-use Net::SNMPu::Message qw(
-   OCTET_STRING SEQUENCE INTEGER SNMP_VERSION_1 SNMP_VERSION_2C TRUE
+use Net::SNMPu::Security;
+use Net::SNMPu::Message;
+use Net::SNMPu::Constants qw(
+   :securityModels :versions :bool
+   OCTET_STRING SEQUENCE INTEGER
 );
 
 ## Handle importing/exporting of symbols
@@ -17,7 +17,7 @@ sub import {
    return Net::SNMPu::Security->export_to_level(1, @_);
 }
 
-## RFC 3584 - snmpCommunityName::=OCTET STRING 
+## RFC 3584 - snmpCommunityName::=OCTET STRING
 use constant {
    COMMUNITY_DEFAULT => 'public',
 };
@@ -122,7 +122,7 @@ sub community {
 sub security_model {
    my ($this) = @_;
 
-   # RFC 3411 - SnmpSecurityModel::=TEXTUAL-CONVENTION 
+   # RFC 3411 - SnmpSecurityModel::=TEXTUAL-CONVENTION
 
    if ($this->{_version} == SNMP_VERSION_2C) {
       return SECURITY_MODEL_SNMPV2C;

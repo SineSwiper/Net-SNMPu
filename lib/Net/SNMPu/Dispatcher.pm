@@ -5,8 +5,9 @@ package Net::SNMPu::Dispatcher;
 use sanity;
 use Errno;
 
-use Net::SNMPu::MessageProcessing();
-use Net::SNMPu::Message qw( TRUE FALSE );
+use Net::SNMPu::MessageProcessing ();
+use Net::SNMPu::Message;
+use Net::SNMPu::Constants qw(:bool);
 
 ## Package variables
 

@@ -104,7 +104,8 @@ See also L</max_requests>.
 use sanity 0.94;
 use Moo 1.000000;
 use MooX::Types::MooseLike 0.15;  # ::Base got no $VERSION
-use MooX::Types::MooseLike::Base qw(InstanceOf ArrayRef Bool);
+use MooX::Types::MooseLike::Base qw(InstanceOf ArrayRef Bool Str);
+use MooX::Types::CLike qw(Nibble Byte);
 
 use List::AllUtils 'first';
 
@@ -156,7 +157,7 @@ around BUILDARGS => sub {
          }
       }
    }
-   $hash->{_transport_argv} //= $transport_argv
+   $hash->{_transport_argv} //= $transport_argv;
 
    # ...and ones associated with the Security Model.
    my $security_argv = [];
@@ -168,7 +169,7 @@ around BUILDARGS => sub {
          }
       }
    }
-   $hash->{_security_argv} //= $security_argv
+   $hash->{_security_argv} //= $security_argv;
 
    $orig->($self, $hash);
 };
@@ -267,7 +268,7 @@ sub BUILD {
    return wantarray ? ($self, $self->error) : $self;
 }
 
-has dispatcher (
+has dispatcher => (
    is       => 'ro',
    isa      => InstanceOf['Net::SNMPu::Dispatcher'],
    default  => sub {
@@ -326,7 +327,7 @@ has security => (
    init_arg  => undef,
    default   => sub {
       my $self = shift;
-      my ($security, $error) = Net::SNMPu::Security->new($self->_security_argv);
+      my ($security, $error) = Net::SNMPu::Security->new(@{ $self->_security_argv });
       if ($error) { $self->_error($error); return; }
       return $security;
    },
@@ -394,7 +395,7 @@ has delay => (
       die 'The delay value "'.$_[0].'" is expected in positive numeric format'
          unless ($_[0] =~ /^\d+(?:\.\d+)?$/);
       die 'The delay value "'.$_[0].'" is out of range (0..31556926)'
-         if ($delay < 0 || $delay > 31556926);
+         if ($_[0] < 0 || $_[0] > 31556926);
    },
    trigger => sub {
       my ($self, $val, $oldval) = @_;
@@ -1411,7 +1412,7 @@ has version => (
       };
 
       for (keys %{$versions}) {
-         if ($version =~ m/^$_$/i) {
+         if ($_[0] =~ m/^$_$/i) {
             return $versions->{$_};
          }
       }
@@ -1666,8 +1667,7 @@ sub DEBUG_INFO {
    return if ($_[0]->debug && DEBUG_SNMP);  # first for hot-ness
    shift;  # $self; not needed here
 
-   return printf (
-      'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n",
+   return printf 'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n", (
       (caller 0)[2],
       (caller 1)[3],
       @_
@@ -1811,7 +1811,7 @@ sub _prepare_request {
    return if ($self->has_error);
 
    # prepare PDU request
-   my $prepare_method = 'prepare_'.$type
+   my $prepare_method = 'prepare_'.$type;
    $self->pdu->$prepare_method($argv);
    return $self->_error($self->pdu->error) if ($self->pdu->has_error);
 
@@ -1853,10 +1853,10 @@ sub _create_pdu {
       transport  => $self->transport,
       callback   => $self->_callback_closure,
       request_id => $self->dispatcher->msg_handle_alloc,
-      $self->has_context_engine_id ?
-         (context_engine_id => $self->context_engine_id}) : (),
-      $self->has_context_name ?
-         (context_name      => $self->context_name)       : (),
+      ($self->has_context_engine_id ?
+         (context_engine_id => $self->context_engine_id) : () ),
+      ($self->has_context_name ?
+         (context_name      => $self->context_name)      : () ),
    );
 
    return $self->_error($error) if $error;
@@ -1866,8 +1866,20 @@ sub _create_pdu {
    return $self->_set_pdu($pdu);
 }
 
-### FIXME ###
-sub _callback {
+### FINISH ###
+has _callback => (
+   is       => 'rwp',
+   isa      => CodeRef,
+
+   init_arg => 'callback',
+   handles  => {
+      dispatch      => 'loop',
+      dispatch_once => 'one_event',
+   }
+);
+
+
+sub _set_callback {
    my ($self, $callback) = @_;
 
    # We validate the callback argument and then create an anonymous
@@ -1935,6 +1947,9 @@ sub _callback_closure {
 }
 
 ### FIXME: Need to check the dispatcher queue instead ###
+my $NONBLOCKING = 0;
+my $BLOCKING    = 0;
+
 sub _object_type_validate {
    my ($self) = @_;
 
@@ -1951,7 +1966,7 @@ sub _object_type_validate {
       return $self->_error(
          'Cannot create non-blocking objects when blocking objects exist'
       );
-   } elsunless ($self->nonblocking && $NONBLOCKING) {
+   } elsif (!$self->nonblocking && $NONBLOCKING) {
       return $self->_error(
          'Cannot create blocking objects when non-blocking objects exist'
       );
@@ -1964,7 +1979,7 @@ sub _object_type_validate {
 sub _perform_discovery {
    my ($self) = @_;
 
-   return TRUE if ($self->{_security}->discovered);
+   return TRUE if ($self->_security->discovered);
 
    # RFC 3414 - Section 4: "Discovery... ...may be accomplished by
    # generating a Request message with a securityLevel of noAuthNoPriv,
@@ -2236,7 +2251,7 @@ sub _get_entries_cb {
 
    while (@names) {
 
-      my @row = ;
+      my @row = ();
       my $row_index = undef;
 
       # Match up the responses to the requested columns.
@@ -2252,7 +2267,7 @@ sub _get_entries_cb {
 
             $self->DEBUG_INFO('column number / oid number mismatch');
             $last_entry = FALSE;
-            @row = ;
+            @row = ();
             last;
          }
 
@@ -2324,7 +2339,7 @@ sub _get_entries_cb {
             # The index for this response is less than the current index,
             # so we throw out everything and start over.
 
-            @row = ;
+            @row = ();
             $row_index = $index;
             $row[$col_num] = $name;
 
@@ -2518,8 +2533,7 @@ sub _error {
    $self->pdu->_clear_callback
       if ($self->has_pdu && $self->pdu->has_callback);
 
-   return printf (
-      'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n",
+   return printf 'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n", (
       (caller 0)[2],
       (caller 1)[3],
       @_

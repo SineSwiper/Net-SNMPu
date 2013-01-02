@@ -7,26 +7,10 @@ use Class::Load;
 
 ## Handle importing/exporting of symbols
 
-use Net::SNMPu::Message qw(
-   :securityLevels :securityModels :versions TRUE FALSE 
+use Net::SNMPu::Message;
+use Net::SNMPu::Constants qw(
+   :securityLevels :securityModels :versions :bool
 );
-use parent 'Exporter';
-
-our @EXPORT_OK = qw( DEBUG_INFO );
-our %EXPORT_TAGS = (
-   levels => [
-      qw( SECURITY_LEVEL_NOAUTHNOPRIV SECURITY_LEVEL_AUTHNOPRIV
-          SECURITY_LEVEL_AUTHPRIV )
-   ],
-   models => [
-      qw( SECURITY_MODEL_ANY SECURITY_MODEL_SNMPV1 SECURITY_MODEL_SNMPV2C
-          SECURITY_MODEL_USM )
-   ]
-);
-
-Exporter::export_ok_tags( qw( levels models ) );
-
-$EXPORT_TAGS{ALL} = [ @EXPORT_OK ];
 
 ## Package variables
 

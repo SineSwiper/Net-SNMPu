@@ -4,9 +4,9 @@ package Net::SNMPu::Transport;
 
 use sanity;
 use Moo;
-use MooX::Types::MooseLike::Base qw(InstanceOf);
+use MooX::Types::MooseLike::Base qw(InstanceOf ScalarRef ArrayRef Str Int);
 
-use Net::SNMPu::Constants ':domains :msgsize :ports :retries :timeout :bool';
+use Net::SNMPu::Constants qw(DEBUG_TRANSPORT SEQUENCE :domains :msgsize :maxreq :ports :retries :timeout :bool);
 
 use IO::Socket::IP;
 use List::AllUtils 'max';
@@ -155,7 +155,7 @@ around BUILDARGS => sub {
          return;
       }
       my $socket = $newhash->{_socket};
-      DEBUG_INFO('opened %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+      $self->DEBUG_INFO('opened %s/%s socket [%d]', $proto, $domain, $socket->fileno);
 
       # Bind the socket.
       if (!defined $socket->bind($sock_name)) {
@@ -208,7 +208,7 @@ around BUILDARGS => sub {
       # Adjust the shared maxMsgSize if necessary.
       $sparam->[_SHARED_MAXSIZE] = $newhash->{max_msg_size} = max($sparam->[_SHARED_MAXSIZE], $newhash->{max_msg_size});
 
-      DEBUG_INFO('reused %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+      $self->DEBUG_INFO('reused %s/%s socket [%d]', $proto, $domain, $socket->fileno);
    }
 
    $orig->($self, $newhash);
@@ -276,6 +276,17 @@ has session => (
       _argument_munge
    )],
 );
+
+sub DEBUG_INFO {
+   return if ($_[0]->debug && DEBUG_TRANSPORT);  # first for hot-ness
+   shift;  # $self; not needed here
+
+   return printf 'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n", (
+      (caller 0)[2],
+      (caller 1)[3],
+      @_
+   );
+}
 
 # Online, in-use socket
 has socket => (
@@ -367,7 +378,7 @@ sub accept {
 
    my $socket = $self->socket->accept || return $self->_error('Failed to accept the connection');
 
-   DEBUG_INFO('accepted %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+   $self->DEBUG_INFO('accepted %s/%s socket [%d]', $socket->protocol, $socket->sockdomain, $socket->fileno);
 
    # Create a new object by copying the current object.
    return $self->new(
@@ -500,7 +511,7 @@ sub recv {
    $$rbuffer .= $buf;
 
    if ($buf_len < $self->_reasm_length) {
-      DEBUG_INFO(
+      $self->DEBUG_INFO(
          'message is incomplete (expect %u bytes, have %u bytes)',
          $self->_reasm_length, $buf_len
       );
@@ -556,16 +567,6 @@ sub _reasm_reset {
    }
    $self->_clear_reasm_buffer;
    $self->_clear_reasm_length;
-}
-
-sub DEBUG_INFO {
-   return $DEBUG if (!$DEBUG);
-
-   return printf
-      sprintf('debug: [%d] %s(): ', (caller 0)[2], (caller 1)[3]) .
-      ((@_ > 1) ? shift(@_) : '%s') .
-      "\n",
-      @_;
 }
 
 # ============================================================================

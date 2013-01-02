@@ -4,7 +4,7 @@ package Net::SNMPu::Constants;
 # ABSTRACT: Constants used in Net::SNMPu
 
 use constant {
-   
+
    # Debugging
    DEBUG_ALL        => 0xff,  # All
    DEBUG_NONE       => 0x00,  # None
@@ -14,7 +14,7 @@ use constant {
    DEBUG_DISPATCHER => 0x08,  # Dispatcher
    DEBUG_PROCESSING => 0x10,  # Message Processing
    DEBUG_SECURITY   => 0x20,  # Security
-   
+
    ## ASN.1 Basic Encoding Rules type definitions
 
    INTEGER                  => 0x02,  # INTEGER
@@ -83,22 +83,24 @@ use constant {
    SECURITY_MODEL_ANY          => 0,  # Reserved for 'any'
    SECURITY_MODEL_SNMPV1       => 1,  # Reserved for SNMPv1
    SECURITY_MODEL_SNMPV2C      => 2,  # Reserved for SNMPv2c
-   SECURITY_MODEL_USM          => 3,  # User-Based Security Model (USM) 
+   SECURITY_MODEL_USM          => 3,  # User-Based Security Model (USM)
 
    ## Translation masks
 
-   #TRANSLATE_NONE           => 0x00,  # Bit masks used to determine
-   #TRANSLATE_OCTET_STRING   => 0x01,  # if a specific ASN.1 type is
-   #TRANSLATE_NULL           => 0x02,  # translated into a "human
-   #TRANSLATE_TIMETICKS      => 0x04,  # readable" form.
-   #TRANSLATE_OPAQUE         => 0x08,
-   #TRANSLATE_NOSUCHOBJECT   => 0x10,
-   #TRANSLATE_NOSUCHINSTANCE => 0x20,
-   #TRANSLATE_ENDOFMIBVIEW   => 0x40,
-   #TRANSLATE_UNSIGNED       => 0x80,
-   #TRANSLATE_ALL            => 0xff,
+   ### FIXME: Remove these at some point ###
 
-   ## Truth values 
+   TRANSLATE_NONE           => 0x00,  # Bit masks used to determine
+   TRANSLATE_OCTET_STRING   => 0x01,  # if a specific ASN.1 type is
+   TRANSLATE_NULL           => 0x02,  # translated into a "human
+   TRANSLATE_TIMETICKS      => 0x04,  # readable" form.
+   TRANSLATE_OPAQUE         => 0x08,
+   TRANSLATE_NOSUCHOBJECT   => 0x10,
+   TRANSLATE_NOSUCHINSTANCE => 0x20,
+   TRANSLATE_ENDOFMIBVIEW   => 0x40,
+   TRANSLATE_UNSIGNED       => 0x80,
+   TRANSLATE_ALL            => 0xff,
+
+   ## Truth values
 
    TRUE                     => 0x01,
    FALSE                    => 0x00,
@@ -115,28 +117,28 @@ use constant {
    DOMAIN_TCPIPV4  => '1.3.6.1.2.1.100.1.5',  # transportDomainTcpIpv4
    DOMAIN_TCPIPV6  => '1.3.6.1.2.1.100.1.6',  # transportDomainTcpIpv6
    DOMAIN_TCPIPV6Z => '1.3.6.1.2.1.100.1.8',  # transportDomainTcpIpv6z
-   
+
    ## SNMP well-known ports
    SNMP_PORT            => 161,
    SNMP_TRAP_PORT       => 162,
-   
+
    ## RFC 3411 - snmpEngineMaxMessageSize::=INTEGER (484..2147483647)
    MSG_SIZE_DEFAULT     =>   484,
    MSG_SIZE_MINIMUM     =>   484,
    MSG_SIZE_MAXIMUM     => 65535,  # 2147483647 is not reasonable
-   
+
    RETRIES_DEFAULT      =>   1,
    RETRIES_MINIMUM      =>   0,
    RETRIES_MAXIMUM      =>  20,
-   
+
    TIMEOUT_DEFAULT      =>   5.0,
    TIMEOUT_MINIMUM      =>   1.0,
    TIMEOUT_MAXIMUM      =>  60.0,
-   
+
    MAX_REQUESTS_DEFAULT =>     3,
    MAX_REQUESTS_MINIMUM =>     0,
    MAX_REQUESTS_MAXIMUM => 65535,
-   
+
 };
 
 use parent 'Exporter';
@@ -155,20 +157,21 @@ our %EXPORT_TAGS = (
           EGP_NEIGHBOR_LOSS ENTERPRISE_SPECIFIC )
    ],
    snmp        => [
-      qw( SNMP_VERSION_1 SNMP_VERSION_2C SNMP_VERSION_3 SNMP_PORT 
+      qw( SNMP_VERSION_1 SNMP_VERSION_2C SNMP_VERSION_3 SNMP_PORT
           SNMP_TRAP_PORT )
    ],
-   #translate   => [
-   #   qw( TRANSLATE_NONE TRANSLATE_OCTET_STRING TRANSLATE_NULL 
-   #       TRANSLATE_TIMETICKS TRANSLATE_OPAQUE TRANSLATE_NOSUCHOBJECT 
-   #       TRANSLATE_NOSUCHINSTANCE TRANSLATE_ENDOFMIBVIEW TRANSLATE_UNSIGNED 
-   #       TRANSLATE_ALL )
-   #],
+   ### FIXME: Remove these at some point ###
+   translate   => [
+      qw( TRANSLATE_NONE TRANSLATE_OCTET_STRING TRANSLATE_NULL
+          TRANSLATE_TIMETICKS TRANSLATE_OPAQUE TRANSLATE_NOSUCHOBJECT
+          TRANSLATE_NOSUCHINSTANCE TRANSLATE_ENDOFMIBVIEW TRANSLATE_UNSIGNED
+          TRANSLATE_ALL )
+   ],
    bool        => [ qw( TRUE FALSE ) ],
 
    # Message stuff
    msgFlags       => [
-      qw( MSG_FLAGS_NOAUTHNOPRIV MSG_FLAGS_AUTH MSG_FLAGS_PRIV 
+      qw( MSG_FLAGS_NOAUTHNOPRIV MSG_FLAGS_AUTH MSG_FLAGS_PRIV
           MSG_FLAGS_REPORTABLE MSG_FLAGS_MASK )
    ],
    securityLevels => [
@@ -197,14 +200,15 @@ our %EXPORT_TAGS = (
    ports   => [ qw( SNMP_PORT SNMP_TRAP_PORT )                           ],
    retries => [ qw( RETRIES_DEFAULT RETRIES_MINIMUM RETRIES_MAXIMUM )    ],
    timeout => [ qw( TIMEOUT_DEFAULT TIMEOUT_MINIMUM TIMEOUT_MAXIMUM )    ],
+   maxreq  => [ qw( MAX_REQUESTS_DEFAULT MAX_REQUESTS_MINIMUM MAX_REQUESTS_MAXIMUM ) ],
 );
 
-Exporter::export_ok_tags( qw( 
+Exporter::export_ok_tags( qw(
    debug generictrap msgFlags securityLevels securityModels snmp types versions
-   domains msgsize ports retries timeout
+   domains msgsize ports retries timeout maxreq bool translate
 ) );
 
-$EXPORT_TAGS{asn1} = $EXPORT_TAGS{types}; 
+$EXPORT_TAGS{asn1} = $EXPORT_TAGS{types};
 $EXPORT_TAGS{ALL}  = [ @EXPORT_OK ];
 
 =head1 DESCRIPTION
@@ -221,14 +225,14 @@ Nothing is exported on default.
 
 =item Tags
 
-=over 
+=over
 
 =item :asn1 (or :types)
 
-INTEGER, INTEGER32, OCTET_STRING, NULL, OBJECT_IDENTIFIER, SEQUENCE, 
-IPADDRESS, COUNTER, COUNTER32, GAUGE, GAUGE32, UNSIGNED32, TIMETICKS, OPAQUE, 
-COUNTER64, NOSUCHOBJECT, NOSUCHINSTANCE, ENDOFMIBVIEW, GET_REQUEST, 
-GET_NEXT_REQUEST, GET_RESPONSE, SET_REQUEST, TRAP, GET_BULK_REQUEST, 
+INTEGER, INTEGER32, OCTET_STRING, NULL, OBJECT_IDENTIFIER, SEQUENCE,
+IPADDRESS, COUNTER, COUNTER32, GAUGE, GAUGE32, UNSIGNED32, TIMETICKS, OPAQUE,
+COUNTER64, NOSUCHOBJECT, NOSUCHINSTANCE, ENDOFMIBVIEW, GET_REQUEST,
+GET_NEXT_REQUEST, GET_RESPONSE, SET_REQUEST, TRAP, GET_BULK_REQUEST,
 INFORM_REQUEST, SNMPV2_TRAP, REPORT
 
 =item :debug
@@ -248,7 +252,7 @@ SNMP_VERSION_1, SNMP_VERSION_2C, SNMP_VERSION_3, SNMP_PORT, SNMP_TRAP_PORT
 =item :translate
 
 TRANSLATE_NONE, TRANSLATE_OCTET_STRING, TRANSLATE_NULL, TRANSLATE_TIMETICKS,
-TRANSLATE_OPAQUE, TRANSLATE_NOSUCHOBJECT, TRANSLATE_NOSUCHINSTANCE, 
+TRANSLATE_OPAQUE, TRANSLATE_NOSUCHOBJECT, TRANSLATE_NOSUCHINSTANCE,
 TRANSLATE_ENDOFMIBVIEW, TRANSLATE_UNSIGNED, TRANSLATE_ALL
 
 =item :ALL

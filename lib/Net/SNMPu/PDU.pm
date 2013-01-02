@@ -1,28 +1,23 @@
 package Net::SNMPu::PDU;
 
-# ABSTRACT: Object used to represent a SNMP PDU. 
+# ABSTRACT: Object used to represent a SNMP PDU.
 
 use sanity;
 use Net::SNMPu::Message;
-use Net::SNMPu::Constants qw( 
-   :types :versions ENTERPRISE_SPECIFIC TRUE FALSE DEBUG_INFO 
+use Net::SNMPu::Constants qw(
+   :types :versions :domains :bool ENTERPRISE_SPECIFIC
 );
-use Net::SNMPu::Utils 'asn1_itoa';
-
-use Net::SNMPu::Transport qw( DOMAIN_UDPIPV4 DOMAIN_TCPIPV4 );
 
 use parent 'Net::SNMPu::Message';
 
-sub import {
-   return Net::SNMPu::Message->export_to_level(1, @_);
-}
+my $DEBUG = 0;  ### FIXME ###
 
 # [public methods] -----------------------------------------------------------
 
 sub new {
    my $class = shift;
 
-   # We play some games here to allow us to "convert" a Message into a PDU. 
+   # We play some games here to allow us to "convert" a Message into a PDU.
 
    my $this = ref($_[0]) ? bless shift(@_), $class : $class->SUPER::new();
 
@@ -128,7 +123,7 @@ sub prepare_trap {
 
    if (!defined $enterprise) {
 
-      # Use iso(1).org(3).dod(6).internet(1).private(4).enterprises(1) 
+      # Use iso(1).org(3).dod(6).internet(1).private(4).enterprises(1)
       # for the default enterprise.
 
       $this->{_enterprise} = '1.3.6.1.4.1';
@@ -330,7 +325,7 @@ sub prepare_pdu {
       return $this->_error();
    }
 
-   # PDU::=SEQUENCE 
+   # PDU::=SEQUENCE
    if (!defined $this->_prepare_pdu_sequence($type)) {
       return $this->_error();
    }
@@ -355,7 +350,7 @@ sub prepare_pdu_scope {
 sub process_pdu {
    my ($this) = @_;
 
-   # Clear any errors 
+   # Clear any errors
    $this->_error_clear();
 
    # PDU::=SEQUENCE
@@ -398,7 +393,7 @@ sub pdu_type {
 sub error_status {
    my ($this, $status) = @_;
 
-   # error-status::=INTEGER { noError(0) .. inconsistentName(18) } 
+   # error-status::=INTEGER { noError(0) .. inconsistentName(18) }
 
    if (@_ == 2) {
       if (!defined $status) {
@@ -421,7 +416,7 @@ sub error_status {
 sub error_index {
    my ($this, $index) = @_;
 
-   # error-index::=INTEGER (0..max-bindings) 
+   # error-index::=INTEGER (0..max-bindings)
 
    if (@_ == 2) {
       if (!defined $index) {
@@ -485,7 +480,7 @@ sub var_bind_list {
       # to determine the ordering.  The ASN.1 types HASH is also
       # updated here if a cooresponding HASH is passed.  We double
       # check the mapping by populating the hash with the keys of
-      # the VarBindList HASH. 
+      # the VarBindList HASH.
 
       if (!defined($vbl) || (ref($vbl) ne 'HASH')) {
 
@@ -583,7 +578,7 @@ sub _prepare_pdu_sequence {
 
    if ($this->{_pdu_type} != TRAP) { # PDU::=SEQUENCE
 
-      # error-index/max-repetitions::=INTEGER 
+      # error-index/max-repetitions::=INTEGER
       if (!defined $this->prepare(INTEGER, $this->{_error_index})) {
          return $this->_error();
       }
@@ -593,41 +588,41 @@ sub _prepare_pdu_sequence {
          return $this->_error();
       }
 
-      # request-id::=INTEGER  
+      # request-id::=INTEGER
       if (!defined $this->prepare(INTEGER, $this->{_request_id})) {
          return $this->_error();
       }
 
    } else { # Trap-PDU::=IMPLICIT SEQUENCE
 
-      # time-stamp::=TimeTicks 
+      # time-stamp::=TimeTicks
       if (!defined $this->prepare(TIMETICKS, $this->{_time_stamp})) {
          return $this->_error();
       }
 
-      # specific-trap::=INTEGER 
+      # specific-trap::=INTEGER
       if (!defined $this->prepare(INTEGER, $this->{_specific_trap})) {
          return $this->_error();
       }
 
-      # generic-trap::=INTEGER  
+      # generic-trap::=INTEGER
       if (!defined $this->prepare(INTEGER, $this->{_generic_trap})) {
          return $this->_error();
       }
 
-      # agent-addr::=NetworkAddress 
+      # agent-addr::=NetworkAddress
       if (!defined $this->prepare(IPADDRESS, $this->{_agent_addr})) {
          return $this->_error();
       }
 
-      # enterprise::=OBJECT IDENTIFIER 
+      # enterprise::=OBJECT IDENTIFIER
       if (!defined $this->prepare(OBJECT_IDENTIFIER, $this->{_enterprise})) {
          return $this->_error();
       }
 
    }
 
-   # PDUs::=CHOICE 
+   # PDUs::=CHOICE
    if (!defined $this->prepare($this->{_pdu_type})) {
       return $this->_error();
    }
@@ -774,7 +769,7 @@ sub _process_var_bind_list {
       return $this->_error();
    }
 
-   # Using the length of the VarBindList SEQUENCE, 
+   # Using the length of the VarBindList SEQUENCE,
    # calculate the end index.
 
    my $end = $this->index() + $value;
@@ -810,7 +805,7 @@ sub _process_var_bind_list {
          $oid .= q{ }; # Pad with spaces
       }
 
-      DEBUG_INFO('{ %s => %s: %s }', $oid, asn1_itoa($type), $value);
+      #DEBUG_INFO('{ %s => %s: %s }', $oid, asn1_itoa($type), $value);
       $this->{_var_bind_list}->{$oid}  = $value;
       $this->{_var_bind_types}->{$oid} = $type;
 
@@ -857,7 +852,7 @@ sub _error_status_itoa {
       notWritable
       inconsistentName
    )];
-   
+
    if (($_[0] > scalar @$error_status) || ($_[0] < 0)) {
       return sprintf '??(%d)', $_[0];
    }
@@ -915,6 +910,16 @@ sub _report_pdu_error {
    } else {
       return $this->_error('Received empty Report-PDU');
    }
+}
+
+sub DEBUG_INFO {
+   return $DEBUG if (!$DEBUG);
+
+   return printf
+      sprintf('debug: [%d] %s(): ', (caller 0)[2], (caller 1)[3]) .
+      ((@_ > 1) ? shift(@_) : '%s') .
+      "\n",
+      @_;
 }
 
 # ============================================================================

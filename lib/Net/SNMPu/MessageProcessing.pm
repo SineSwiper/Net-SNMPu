@@ -3,11 +3,10 @@ package Net::SNMPu::MessageProcessing;
 # ABSTRACT: Object that implements the Message Processing module.
 
 use sanity;
-use Net::SNMPu::PDU
-use Net::SNMPu::Constants qw( 
-   :types :msgFlags :securityLevels :bool SNMP_VERSION_3 
+use Net::SNMPu::PDU;
+use Net::SNMPu::Constants qw(
+   :types :msgFlags :securityLevels :bool SNMP_VERSION_3
 );
-use Net::SNMPu::Utils 'asn1_itoa';
 
 srand( time() ^ ($$ + ($$ <<15)) );
 
@@ -45,7 +44,7 @@ sub prepare_outgoing_msg {
       return $this->_error('The PDU object is missing or invalid');
    }
 
-   # We must have a Security Model in order to prepare the message. 
+   # We must have a Security Model in order to prepare the message.
    if (!defined $pdu->security()) {
       return $this->_error('The Security Model object is not defined');
    }
@@ -70,8 +69,8 @@ sub prepare_outgoing_msg {
          return $this->_error($pdu->error());
       }
 
-      # We need to copy the contextEngineID and contextName to the 
-      # request message so that they are available for comparison 
+      # We need to copy the contextEngineID and contextName to the
+      # request message so that they are available for comparison
       # with the response message.
 
       $msg->context_engine_id($pdu->context_engine_id());
@@ -126,7 +125,7 @@ sub prepare_data_elements {
       return $this->_error($msg->error());
    }
 
-   # Find the request message in the cache.  We are assuming this 
+   # Find the request message in the cache.  We are assuming this
    # message is a response to an outstanding request.
 
    my $request;
@@ -160,7 +159,7 @@ sub prepare_data_elements {
       if ($msg->pdu_type() != GET_RESPONSE) {
           return $this->_error(
              'A %s was expected, but %s was found',
-             asn1_itoa(GET_RESPONSE), asn1_itoa($msg->pdu_type())
+             #asn1_itoa(GET_RESPONSE), asn1_itoa($msg->pdu_type())
           );
       }
 
@@ -173,7 +172,7 @@ sub prepare_data_elements {
       return $this->_error('No matching request message was found');
    }
 
-   # Update the received message with the relevant request data. 
+   # Update the received message with the relevant request data.
    $msg->callback($request->callback());
    $msg->timeout_id($request->timeout_id());
    $msg->transport($request->transport());
@@ -190,7 +189,7 @@ sub prepare_data_elements {
       );
       return FALSE;
    }
-  
+
    $msg->security($request->security());
 
    # Pass off to the Security Model
@@ -233,7 +232,7 @@ sub prepare_data_elements {
          if ($msg->pdu_type() != GET_RESPONSE) {
             $this->_error(
                'A %s was expected, but %s was found',
-               asn1_itoa(GET_RESPONSE), asn1_itoa($msg->pdu_type())
+               #asn1_itoa(GET_RESPONSE), asn1_itoa($msg->pdu_type())
             );
             return FALSE;
          }
@@ -329,7 +328,7 @@ sub _new {
    my ($class) = @_;
 
    # The constructor is private since we only want one MessageProcessing
-   # object.  We also reserve message handle (request-id/msgID) 0 so that 
+   # object.  We also reserve message handle (request-id/msgID) 0 so that
    # it is not used for valid messages.
 
    return bless [ undef, { 0, undef } ], $class;
@@ -425,7 +424,7 @@ sub _process_global_data {
 
    $msg->msg_flags($msg_flags = unpack 'C', $msg_flags);
 
-   # Validate the msgFlags and derive the securityLevel. 
+   # Validate the msgFlags and derive the securityLevel.
 
    my $security_level = SECURITY_LEVEL_NOAUTHNOPRIV;
 
