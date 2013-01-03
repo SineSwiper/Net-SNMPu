@@ -13,3 +13,4 @@ inc/
 *-*.tar.*
 pm_to_blib
 .*.sw?
+mibs

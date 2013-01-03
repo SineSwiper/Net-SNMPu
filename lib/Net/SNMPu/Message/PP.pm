@@ -12,16 +12,6 @@ use sanity;
 # Buffer manipulation methods
 #
 
-sub index {
-   my ($this, $index) = @_;
-
-   if ((@_ == 2) && ($index >= 0) && ($index <= $this->{_length})) {
-      $this->{_index} = $index;
-   }
-
-   return $this->{_index};
-}
-
 sub process {
 #  my ($this, $expected, $found) = @_;
 
@@ -69,7 +59,7 @@ sub process {
       );
    }
 
-   # Update the found ASN.1 type, if the argument is present. 
+   # Update the found ASN.1 type, if the argument is present.
    if (@_ == 3) {
       $_[2] = $type;
    }
@@ -229,7 +219,7 @@ sub _process_octet_string {
    # Translate based on the definition of a DisplayString in RFC 2579.
    #
    #  DisplayString ::= TEXTUAL-CONVENTION
-   # 
+   #
    #  - the graphics characters (32-126) are interpreted as
    #    US ASCII
    #  - NUL, LF, CR, BEL, BS, HT, VT and FF have the special
@@ -314,7 +304,7 @@ sub _process_object_identifier {
       $oid[1] -= 80;
    }
 
-   # Return the OID in dotted notation (optionally with a 
+   # Return the OID in dotted notation (optionally with a
    # leading dot if one was passed to the prepare routine).
 
    if ($this->{_leading_dot}) {
@@ -438,55 +428,6 @@ sub _process_counter64 {
    $int64 =~ s/^\+//;
 
    return $int64;
-}
-
-sub _buffer_append {
-   #my ($this, $value) = @_;
-
-   return $_[0]->_error() if defined $_[0]->{_error};
-
-   # Always reset the index when the buffer is modified
-   $_[0]->{_index} = 0;
-
-   # Update our length
-   $_[0]->{_length} += CORE::length($_[1]);
-
-   # Append to the current buffer
-   return $_[0]->{_buffer} .= $_[1];
-}
-
-sub _buffer_get {
-   #my ($this, $requested) = @_;
-
-   return $_[0]->_error() if defined $_[0]->{_error};
-
-   # Return the number of bytes requested at the current index or 
-   # clear and return the whole buffer if no argument is passed. 
-
-   if (@_ == 2) {
-
-      if (($_[0]->{_index} += $_[1]) > $_[0]->{_length}) {
-         $_[0]->{_index} -= $_[1];
-         if ($_[0]->{_length} >= $_[0]->max_msg_size()) {
-            return $_[0]->_error(
-               'The message size exceeded the buffer maxMsgSize of %d',
-               $_[0]->max_msg_size()
-            );
-         }
-         return $_[0]->_error('Unexpected end of message buffer');
-      }
-
-      return substr $_[0]->{_buffer}, $_[0]->{_index} - $_[1], $_[1];
-   }
-
-   # Always reset the index when the buffer is modified
-   $_[0]->{_index} = 0;
-
-   # Update our length to 0, the whole buffer is about to be cleared.
-   $_[0]->{_length} = 0;
-
-   ### HACK: Redefining length in the first place was kinda hacky... ###
-   return substr $_[0]->{_buffer}, 0, CORE::length($_[0]->{_buffer}), q{};
 }
 
 # ============================================================================
