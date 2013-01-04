@@ -1,7 +1,8 @@
 use sanity;
-use Test::More;
 use Devel::SimpleTrace;
 use Net::SNMPu;
+
+use Test::More tests => 2;
 
 my $session = new_ok( 'Net::SNMPu' => [
    hostname      => 'localhost',
@@ -16,3 +17,8 @@ my $session = new_ok( 'Net::SNMPu' => [
    debug         => 255,
    community     => 'public',
 ], 'create new Net::SNMPu object');
+
+isa_ok( $session->open, 'Net::SNMPu::Transport', 'open object === Transport' );
+
+use Devel::Dwarn;
+Dwarn $session;

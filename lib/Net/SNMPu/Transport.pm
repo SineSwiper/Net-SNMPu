@@ -4,11 +4,11 @@ package Net::SNMPu::Transport;
 
 use sanity;
 use Moo;
-use MooX::Types::MooseLike::Base qw(InstanceOf ScalarRef ArrayRef Str Int);
+use MooX::Types::MooseLike::Base qw(InstanceOf ScalarRef ArrayRef HashRef Str Int);
 
 use Net::SNMPu::Constants qw(DEBUG_TRANSPORT SEQUENCE :domains :msgsize :maxreq :ports :retries :timeout :bool);
 
-use IO::Socket::IP;
+use IO::Socket::IP 0.18;  # 0.18 = supports Domain properly
 use List::AllUtils 'max';
 
 ### FIXME ###
@@ -25,7 +25,7 @@ our $SOCKETS = {};                  # List of shared sockets
 
 around BUILDARGS => sub {
    my ($orig, $self) = (shift, shift);
-   my $hash = $self->_argument_munge(@_);
+   my $hash = Net::SNMPu->_argument_munge(@_);
 
    return $orig->($self, $hash)
       if ($hash->{_socket} && $hash->{_dest});
@@ -131,6 +131,19 @@ around BUILDARGS => sub {
    $sock_args->{Type}     = $proto eq 'tcp' ? SOCK_STREAM : SOCK_DGRAM;
    $sock_args->{Blocking} = FALSE;
 
+   # Build all of this stuff later...
+   $newhash->{_BUILD_args} = $sock_args;
+
+   $orig->($self, $newhash);
+};
+
+# ...like right now
+sub BUILD {
+   my $self = shift;
+   my $sock_args = $self->_BUILD_args;
+
+   my ($proto, $domain) = @$sock_args{qw(Proto Domain)};
+
    # Build dest_args and remove destination if UDP
    my $dest_args = { %$sock_args };
    if ($proto eq 'udp') {
@@ -139,41 +152,40 @@ around BUILDARGS => sub {
    }
 
    # Build the "info" socket first
-   unless ( $newhash->{_dest} = IO::Socket::IP->new(%$dest_args) ) {
-      $session->_error('Cannot create dest socket: %s', $!);
+   unless ( $self->_set_dest( IO::Socket::IP->new(%$dest_args) ) ) {
+      $self->_error('Cannot create dest socket: %s', $!);
       return;
    }
 
    # For all connection-oriented transports and for each unique source
    # address for connectionless transports, create a new socket.
-   my ($sock_name, $dest_name) = ($newhash->{_dest}->sockname, $newhash->{_dest}->peername);
+   my ($sock_name, $dest_name) = ($self->dest->sockname, $self->dest_name);
 
    if ($proto eq 'tcp' || !exists $SOCKETS->{$sock_name}) {
       # Create the real socket
-      unless ( $newhash->{_socket} = IO::Socket::IP->new(%$sock_args) ) {
-         $session->_error('Cannot create new socket: %s', $!);
+      unless ( $self->_set_socket( IO::Socket::IP->new(%$sock_args) ) ) {
+         $self->_error('Cannot create new socket: %s', $!);
          return;
       }
-      my $socket = $newhash->{_socket};
-      $self->DEBUG_INFO('opened %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+      $self->DEBUG_INFO('opened %s/%s socket [%d]', $proto, $domain, $self->fileno);
 
       # Bind the socket.
-      if (!defined $socket->bind($sock_name)) {
-         $session->_error('Failed to bind %s/%s socket: %s', $proto, $domain, $!);
+      if (!defined $self->socket->bind($sock_name)) {
+         $self->_error('Failed to bind %s/%s socket: %s', $proto, $domain, $!);
          return;
       }
 
       # For connection-oriented transports, we either listen or connect.
       if ($proto eq 'tcp') {
          if ($sock_args->{Listen}) {
-            if (!defined $socket->listen($sock_name)) {
-               $session->_error('Failed to listen on %s/%s socket: %s', $proto, $domain, $!);
+            if (!defined $self->socket->listen($sock_name)) {
+               $self->_error('Failed to listen on %s/%s socket: %s', $proto, $domain, $!);
                return;
             }
          }
          else {
-            if (!defined $socket->connect($dest_name)) {
-               $session->_error("Failed to connect to remote host '%s': %s", $newhash->{dest_hostname}, $!);
+            if (!defined $self->socket->connect($dest_name)) {
+               $self->_error("Failed to connect to remote host '%s': %s", $self->dest_hostname, $!);
                return;
             }
          }
@@ -186,15 +198,15 @@ around BUILDARGS => sub {
       # associated with this new object for connectionless transports.
 
       if ($proto eq 'udp') {
-         $newhash->{_sock_param} = $SOCKETS->{$sock_name} = [
-            $newhash->{socket},        # Shared Socket object
-            1,                         # Reference count
-            $newhash->{max_msg_size},  # Shared maximum message size
-         ];
+         $self->_set_sock_param( $SOCKETS->{$sock_name} = [
+            $self->socket,        # Shared Socket object
+            1,                    # Reference count
+            $self->max_msg_size,  # Shared maximum message size
+         ] );
       }
       else {
          # Reassembly buffer required for TCP
-         $newhash->{_reasm_object} = Net::SNMPu::Message->new;
+         $self->_reasm_object;  # force creation
       }
    }
    else {
@@ -202,17 +214,15 @@ around BUILDARGS => sub {
       $SOCKETS->{$sock_name}->[_SHARED_REFC]++;
 
       # Assign the socket to the object.
-      my $socket = $newhash->{_socket}     = $SOCKETS->{$sock_name}->[_SHARED_SOCKET];
-      my $sparam = $newhash->{_sock_param} = $SOCKETS->{$sock_name};
+      my $socket = $self->_set_socket( $SOCKETS->{$sock_name}->[_SHARED_SOCKET] );
+      my $sparam = $self->_sock_param( $SOCKETS->{$sock_name} );
 
       # Adjust the shared maxMsgSize if necessary.
-      $sparam->[_SHARED_MAXSIZE] = $newhash->{max_msg_size} = max($sparam->[_SHARED_MAXSIZE], $newhash->{max_msg_size});
+      $self->max_msg_size( $self->max_msg_size );  # force trigger
 
-      $self->DEBUG_INFO('reused %s/%s socket [%d]', $proto, $domain, $socket->fileno);
+      $self->DEBUG_INFO('reused %s/%s socket [%d]', $proto, $domain, $self->fileno);
    }
-
-   $orig->($self, $newhash);
-};
+}
 
 # [attributes] ------------------------------------------------------------------
 
@@ -221,7 +231,7 @@ has max_msg_size => (
    isa     => sub { __validate_posnum('maxMsgSize', $_[0], MSG_SIZE_MINIMUM, MSG_SIZE_MAXIMUM); },
    trigger => sub {
       my ($self, $val, $oldval) = @_;
-      if ($self->_has_sock_param) {
+      if ($self->connectionless) {  # _has_sock_param
          return $self->_sock_param->[_SHARED_MAXSIZE] = max($self->_sock_param->[_SHARED_MAXSIZE], $val);
       }
       return $val;
@@ -249,6 +259,7 @@ has timeout => (
    default => sub { TIMEOUT_DEFAULT },
 );
 
+### FIXME: Something like this needs to be elsewhere, as it is needed a LOT ###
 sub __validate_posnum {
    my ($type, $num, $min, $max) = @_;
    die sprintf(
@@ -264,6 +275,7 @@ sub __validate_posnum {
    return TRUE;
 }
 
+### FIXME: This should probably be a bit more independant... ###
 has session => (
    is        => 'ro',
    isa       => InstanceOf['Net::SNMPu'],
@@ -273,12 +285,11 @@ has session => (
       error
       _error
       _clear_error
-      _argument_munge
    )],
 );
 
 sub DEBUG_INFO {
-   return if ($_[0]->debug && DEBUG_TRANSPORT);  # first for hot-ness
+   return if ($_[0]->debug & DEBUG_TRANSPORT);  # first for hot-ness
    shift;  # $self; not needed here
 
    return printf 'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n", (
@@ -290,52 +301,59 @@ sub DEBUG_INFO {
 
 # Online, in-use socket
 has socket => (
-   is        => 'ro',
+   is        => 'rwp',
    isa       => InstanceOf['IO::Socket::IP'],
    predicate => 1,
-   init_arg  => '_socket',
+   init_arg  => undef,
    handles   => {qw{
-      fileno      fileno
-      connected   connected
+      fileno         fileno
+      connected      connected
 
-      sockhost    sock_address
-      sockport    sock_port
-      sockaddr    sock_addr
-      sockdomain  sock_domain
-      sockname    sock_name
-      sockscope   sock_scope_id
-      sockflow    sock_flowinfo
+      sock_address   sockhost
+      sock_port      sockport
+      sock_addr      sockaddr
+      sock_domain    sockdomain
+      sock_name      sockname
+      sock_scope_id  sockscope
+      sock_flowinfo  sockflow
 
-      peerhost    peer_address
-      peerport    peer_port
-      peeraddr    peer_addr
-      peerdomain  peer_domain
-      peername    peer_name
-      peerscope   peer_scope_id
-      peerflow    peer_flowinfo
+      peer_address   peerhost
+      peer_port      peerport
+      peer_addr      peeraddr
+      peer_domain    peerdomain
+      peer_name      peername
+      peer_scope_id  peerscope
+      peer_flowinfo  peerflow
    }},
 );
 
 has _sock_param => (
-   is        => 'ro',
+   is        => 'rw',
    isa       => ArrayRef,
    predicate => 'connectionless',
+   init_arg  => undef,
+);
+
+# A hold-over for Transport params between BUILDARGS and BUILD
+has _BUILD_args => (
+   is        => 'ro',
+   isa       => HashRef,
 );
 
 # Socket object only for the purposes of storing destination information
 has dest => (
-   is        => 'ro',
+   is        => 'rwp',
    isa       => InstanceOf['IO::Socket::IP'],
    predicate => 1,
-   init_arg  => '_dest',
+   init_arg  => undef,
    handles   => {qw{
-      peerhost    dest_address
-      peerport    dest_port
-      peeraddr    dest_addr
-      peerdomain  dest_domain
-      peername    dest_name
-      peerscope   dest_scope_id
-      peerflow    dest_flowinfo
+      dest_address   peerhost
+      dest_port      peerport
+      dest_addr      peeraddr
+      dest_domain    peerdomain
+      dest_name      peername
+      dest_scope_id  peerscope
+      dest_flowinfo  peerflow
    }},
 );
 
@@ -354,6 +372,8 @@ has _reasm_object => (
    is        => 'ro',
    isa       => InstanceOf['Net::SNMPu::Message'],
    predicate => 1,
+   lazy      => 1,
+   default   => sub { Net::SNMPu::Message->new },
 );
 has _reasm_buffer => (
    is        => 'rw',
@@ -451,8 +471,6 @@ sub recv {
    # to properly determine how much data to receive.
 
    unless ($self->_has_reasm_buffer) {
-      return $self->_error('The reassembly object is not defined')
-         unless $self->_has_reasm_object;
       my $reasm = $self->_reasm_object;
 
       # Read enough data to parse the ASN.1 type and length.

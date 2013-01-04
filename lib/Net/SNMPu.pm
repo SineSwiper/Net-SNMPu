@@ -104,7 +104,7 @@ See also L</max_requests>.
 use sanity 0.94;
 use Moo 1.000000;
 use MooX::Types::MooseLike 0.15;  # ::Base got no $VERSION
-use MooX::Types::MooseLike::Base qw(InstanceOf ArrayRef Bool Str);
+use MooX::Types::MooseLike::Base qw(InstanceOf ArrayRef CodeRef Bool Str);
 use MooX::Types::CLike qw(Nibble Byte);
 
 use List::AllUtils 'first';
@@ -136,7 +136,7 @@ new code.
 
 around BUILDARGS => sub {
    my ($orig, $self) = (shift, shift);
-   my $hash = $self->_argument_munge(@_);
+   my $hash = Net::SNMPu->_argument_munge(@_);
 
    my @trans_argv = (qw{
       hostname (?:de?st|peer)?(?:addr|port) (?:src|sock|local)(?:addr|port)
@@ -271,6 +271,7 @@ sub BUILD {
 has dispatcher => (
    is       => 'ro',
    isa      => InstanceOf['Net::SNMPu::Dispatcher'],
+   lazy      => 1,
    default  => sub {
       Net::SNMPu::Dispatcher->instance ||
       die 'FATAL: Failed to create Dispatcher instance';
@@ -286,6 +287,7 @@ has pdu => (
    is        => 'rwp',
    isa       => InstanceOf['Net::SNMPu::PDU'],
    builder   => '_create_pdu',
+   lazy      => 1,
    predicate => 1,
    init_arg  => undef,
    handles   => [qw(
@@ -301,6 +303,7 @@ has transport => (
    is        => 'rwp',
    isa       => InstanceOf['Net::SNMPu::Transport'],
    builder   => 'open',
+   lazy      => 1,
    predicate => 1,
    init_arg  => undef,
    handles   => {qw(
@@ -421,7 +424,7 @@ sub open {
       @{ $self->_transport_argv },
       session => $self,
    );
-   return if $self->_has_error;
+   return if $self->has_error;
 
    # Perform SNMPv3 authoritative engine discovery.
    $self->_perform_discovery
@@ -1664,7 +1667,7 @@ has debug => (
 );
 
 sub DEBUG_INFO {
-   return if ($_[0]->debug && DEBUG_SNMP);  # first for hot-ness
+   return if ($_[0]->debug & DEBUG_SNMP);  # first for hot-ness
    shift;  # $self; not needed here
 
    return printf 'debug: [%d] %s(): '.(@_ > 1 ? shift : '%s')."\n", (
@@ -1866,50 +1869,42 @@ sub _create_pdu {
    return $self->_set_pdu($pdu);
 }
 
-### FINISH ###
-has _callback => (
-   is       => 'rwp',
-   isa      => CodeRef,
+has callback => (
+   is        => 'rw',
+   isa       => ArrayRef,
+   coerce  => sub {
+      my ($callback) = @_;
 
-   init_arg => 'callback',
-   handles  => {
-      dispatch      => 'loop',
-      dispatch_once => 'one_event',
-   }
-);
+      # We validate the callback argument and then create an anonymous
+      # array where the first element is the subroutine reference and
+      # the second element is an array reference containing arguments
+      # to pass to the subroutine.
+      my @argv;
 
+      return unless defined $callback;
 
-sub _set_callback {
-   my ($self, $callback) = @_;
+      if (ref $callback eq 'ARRAY' && ref $callback->[0] eq 'CODE') {
+         ($callback, @argv) = @{$callback};
+      }
+      elsif (ref $callback ne 'CODE') {
+         die 'The syntax of the callback is invalid';
+      }
 
-   # We validate the callback argument and then create an anonymous
-   # array where the first element is the subroutine reference and
-   # the second element is an array reference containing arguments
-   # to pass to the subroutine.
+      return [$callback, \@argv];
+   },
+   trigger => sub {
+      my ($self, $val, $oldval) = @_;
 
-   unless ($self->nonblocking) {
+      $self->_clear_error;
+
       return $self->_error(
          'The callback argument is not applicable to blocking objects'
-      );
-   }
+      ) if ($self->nonblocking);
+   },
+   clearer   => 1,
+   predicate => 1,
+);
 
-   my @argv;
-
-   unless (defined $callback) {
-      $self->_clear_callback;
-      return TRUE;
-   } elsif ((ref($callback) eq 'ARRAY') && (ref($callback->[0]) eq 'CODE')) {
-      ($callback, @argv) = @{$callback};
-   } elsif (ref($callback) ne 'CODE') {
-      return $self->_error('The syntax of the callback is invalid');
-   }
-
-   $self->{_callback} = [$callback, \@argv];
-
-   return TRUE;
-}
-
-### FIXME ###
 sub _callback_closure {
    my ($self) = @_;
 
@@ -1917,33 +1912,26 @@ sub _callback_closure {
    # a new PDU object and assign the callback to that object.  The
    # callback is then executed passing a reference to the PDU object
    # as the first argument.  We use a closure to assign that passed
-   # reference to the Net:SNMP object and then invoke the user defined
+   # reference to the Net:SNMPu object and then invoke the user defined
    # callback.
 
-   unless ($self->nonblocking || !defined $self->{_callback}) {
-      return sub
-         {
-            $self->pdu = $_[0];
-            $self->_clear_error;
-            if ($self->pdu->error) {
-               $self->_error($self->pdu->error);
-            }
-            return;
-         };
-   }
-
-   my ($callback, $argv) = @{$self->{_callback}};
-
-   return sub
-      {
+   unless ($self->nonblocking && $self->has_callback) {
+      return [ sub {
          $self->pdu = $_[0];
          $self->_clear_error;
-         if ($self->pdu->error) {
-            $self->_error($self->pdu->error);
-         }
-         $callback->($self, @{$argv});
+         $self->_error($self->pdu->error) if ($self->pdu->error);
          return;
-      };
+      }, [] ];
+   }
+
+   my ($callback, $argv) = @{$self->callback};
+   return [ sub {
+      $self->pdu = $_[0];
+      $self->_clear_error;
+      $self->_error($self->pdu->error) if ($self->pdu->error);
+      $callback->($self, @{$argv});
+      return;
+   }, [] ];
 }
 
 ### FIXME: Need to check the dispatcher queue instead ###
